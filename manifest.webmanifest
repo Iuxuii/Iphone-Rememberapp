@@ -1,7 +1,8 @@
 {
   "name": "Kaiken Alku",
   "short_name": "Kaiken Alku",
-  "description": "My personal space: diary, calendar, to-do, goals and dreams.",
+  "description": "Oma tila: päiväkirja, kalenteri, tehtävät, tavoitteet ja haaveet.",
+  "lang": "fi",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

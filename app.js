@@ -37,20 +37,21 @@ function pad(n) { return String(n).padStart(2, '0'); }
 function isoDate(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function today() { return isoDate(new Date()); }
 function parseISO(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
-function fmt(s, opts) { return parseISO(s).toLocaleDateString('en-GB', opts); }
+function fmt(s, opts) { return parseISO(s).toLocaleDateString('fi-FI', opts); }
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function addDays(s, n) { const d = parseISO(s); d.setDate(d.getDate() + n); return isoDate(d); }
 function relDay(s) {
   const t = today();
-  if (s === t) return 'Today';
-  if (s === addDays(t, -1)) return 'Yesterday';
-  if (s === addDays(t, 1)) return 'Tomorrow';
-  const sameYear = s.slice(0, 4) === t.slice(0, 4);
-  return fmt(s, sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
+  if (s === t) return 'Tänään';
+  if (s === addDays(t, -1)) return 'Eilen';
+  if (s === addDays(t, 1)) return 'Huomenna';
+  const [y, m, d] = s.split('-').map(Number);
+  return s.slice(0, 4) === t.slice(0, 4) ? `${d}.${m}.` : `${d}.${m}.${y}`;
 }
 function longDay(s) {
   const base = fmt(s, { weekday: 'long', day: 'numeric', month: 'long' });
   const r = relDay(s);
-  return ['Today', 'Yesterday', 'Tomorrow'].includes(r) ? `${r} · ${base}` : base;
+  return ['Tänään', 'Eilen', 'Huomenna'].includes(r) ? `${r} · ${base}` : base;
 }
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -87,17 +88,32 @@ function icon(name, cls = '') {
 /* ---------- Sections ---------- */
 
 const SECTIONS = [
-  { id: 'diary', title: 'Diary', icon: 'diary', accent: 'tan' },
-  { id: 'calendar', title: 'Calendar', icon: 'calendar', accent: 'forest' },
-  { id: 'todo', title: 'To-do', icon: 'todo', accent: 'moss' },
-  { id: 'goals', title: 'Goals', icon: 'goals', accent: 'bark' },
-  { id: 'dreams', title: 'Dreams', icon: 'dreams', accent: 'sage' },
+  { id: 'diary', title: 'Päiväkirja', icon: 'diary', accent: 'tan' },
+  { id: 'calendar', title: 'Kalenteri', icon: 'calendar', accent: 'forest' },
+  { id: 'todo', title: 'Tehtävät', icon: 'todo', accent: 'moss' },
+  { id: 'goals', title: 'Tavoitteet', icon: 'goals', accent: 'bark' },
+  { id: 'dreams', title: 'Haaveet', icon: 'dreams', accent: 'sage' },
 ];
 const sec = id => SECTIONS.find(s => s.id === id);
 
-const MOODS = ['Calm', 'Happy', 'Grateful', 'Inspired', 'Tired', 'Low'];
-const AREAS = ['Health', 'Mind', 'Career', 'Money', 'Learning', 'Relationships', 'Home', 'Other'];
-const DREAM_CATS = ['Travel', 'Adventure', 'Create', 'Learn', 'Own', 'Become', 'Give', 'Other'];
+const MOODS = ['Rauhallinen', 'Iloinen', 'Kiitollinen', 'Innostunut', 'Väsynyt', 'Alakuloinen'];
+const AREAS = ['Terveys', 'Mieli', 'Ura', 'Raha', 'Oppiminen', 'Ihmissuhteet', 'Koti', 'Muu'];
+const DREAM_CATS = ['Matkat', 'Seikkailut', 'Luominen', 'Oppiminen', 'Hankinnat', 'Kasvu', 'Antaminen', 'Muu'];
+
+// Entries saved before the app was in Finnish: translate their mood / area / kind.
+(() => {
+  const FI = {
+    Calm: 'Rauhallinen', Happy: 'Iloinen', Grateful: 'Kiitollinen', Inspired: 'Innostunut', Tired: 'Väsynyt', Low: 'Alakuloinen',
+    Health: 'Terveys', Mind: 'Mieli', Career: 'Ura', Money: 'Raha', Learning: 'Oppiminen', Relationships: 'Ihmissuhteet', Home: 'Koti',
+    Other: 'Muu', Travel: 'Matkat', Adventure: 'Seikkailut', Create: 'Luominen', Learn: 'Oppiminen', Own: 'Hankinnat', Become: 'Kasvu', Give: 'Antaminen',
+  };
+  const fix = (key, prop) => {
+    let changed = false;
+    db[key].forEach(x => { if (FI[x[prop]]) { x[prop] = FI[x[prop]]; changed = true; } });
+    if (changed) save(key);
+  };
+  fix('diary', 'mood'); fix('goals', 'area'); fix('dreams', 'category');
+})();
 
 const now = new Date();
 const ui = {
@@ -116,7 +132,7 @@ const ui = {
 function head(id, right = '') {
   const s = sec(id);
   return `<header class="topbar">
-      <a href="#/" class="back">${icon('back')}<span>Lobby</span></a>${right}
+      <a href="#/" class="back">${icon('back')}<span>Etusivu</span></a>${right}
     </header>
     <div class="title-row acc-${s.accent}"><span class="t-ic">${icon(s.icon)}</span><h1>${s.title}</h1></div>`;
 }
@@ -139,34 +155,34 @@ function seg(action, options, current) {
 const STATS = {
   diary() {
     const n = db.diary.length;
-    if (!n) return 'Write your first page';
+    if (!n) return 'Kirjoita ensimmäinen sivu';
     const last = db.diary.reduce((a, b) => (b.date > a.date ? b : a));
-    return `${plural(n, 'entry', 'entries')} · latest ${relDay(last.date)}`;
+    return `${plural(n, 'merkintä', 'merkintää')} · viimeisin ${relDay(last.date).toLowerCase()}`;
   },
   calendar() {
     const t = today();
     const up = db.events.filter(e => e.date >= t)
       .sort((a, b) => a.date.localeCompare(b.date) || (a.time || '99').localeCompare(b.time || '99'));
-    if (!up.length) return 'Nothing planned';
+    if (!up.length) return 'Ei suunnitelmia';
     const e = up[0];
-    return `Next: ${relDay(e.date)}${e.time ? ' ' + e.time : ''} · ${e.title}`;
+    return `Seuraava: ${relDay(e.date)}${e.time ? ' ' + e.time : ''} · ${e.title}`;
   },
   todo() {
     const open = db.todos.filter(x => !x.done);
-    if (!open.length) return db.todos.length ? 'All clear' : 'Nothing yet';
+    if (!open.length) return db.todos.length ? 'Kaikki tehty' : 'Ei vielä tehtäviä';
     const late = open.filter(isLate).length;
     const next = open.filter(x => x.urgent && x.time && !isLate(x)).sort((a, b) => taskKey(a).localeCompare(taskKey(b)))[0];
-    return `${open.length} open${late ? ` · ${late} overdue` : ''}${next ? ` · next ${next.due === today() ? '' : relDay(next.due) + ' '}${next.time}` : ''}`;
+    return `${open.length} avoinna${late ? ` · ${late} myöhässä` : ''}${next ? ` · seuraava ${next.due === today() ? '' : relDay(next.due).toLowerCase() + ' '}${next.time}` : ''}`;
   },
   goals() {
-    if (!db.goals.length) return 'Set your first goal';
+    if (!db.goals.length) return 'Aseta ensimmäinen tavoite';
     const done = db.goals.filter(g => g.done).length;
-    return `${db.goals.length - done} active · ${done} achieved`;
+    return `${db.goals.length - done} käynnissä · ${done} saavutettu`;
   },
   dreams() {
-    if (!db.dreams.length) return 'What do you dream of?';
+    if (!db.dreams.length) return 'Mistä haaveilet?';
     const lived = db.dreams.filter(d => d.status === 'Lived').length;
-    return `${plural(db.dreams.length, 'dream', 'dreams')} · ${lived} lived`;
+    return `${plural(db.dreams.length, 'haave', 'haavetta')} · ${lived} toteutunut`;
   },
 };
 
@@ -175,16 +191,16 @@ const STATS = {
 const ZONES = [
   ['Pacific/Honolulu', 'Honolulu'], ['America/Los_Angeles', 'Los Angeles'], ['America/Denver', 'Denver'],
   ['America/Chicago', 'Chicago'], ['America/New_York', 'New York'], ['America/Toronto', 'Toronto'],
-  ['America/Mexico_City', 'Mexico City'], ['America/Sao_Paulo', 'São Paulo'], ['Atlantic/Reykjavik', 'Reykjavík'],
-  ['Europe/London', 'London'], ['Europe/Lisbon', 'Lisbon'], ['Europe/Paris', 'Paris'], ['Europe/Berlin', 'Berlin'],
-  ['Europe/Madrid', 'Madrid'], ['Europe/Rome', 'Rome'], ['Europe/Amsterdam', 'Amsterdam'], ['Europe/Stockholm', 'Stockholm'],
-  ['Europe/Oslo', 'Oslo'], ['Europe/Copenhagen', 'Copenhagen'], ['Europe/Helsinki', 'Helsinki'], ['Europe/Tallinn', 'Tallinn'],
-  ['Europe/Athens', 'Athens'], ['Europe/Istanbul', 'Istanbul'], ['Europe/Moscow', 'Moscow'], ['Africa/Cairo', 'Cairo'],
-  ['Africa/Johannesburg', 'Johannesburg'], ['Asia/Dubai', 'Dubai'], ['Asia/Kolkata', 'India'], ['Asia/Bangkok', 'Bangkok'],
-  ['Asia/Singapore', 'Singapore'], ['Asia/Shanghai', 'Beijing'], ['Asia/Hong_Kong', 'Hong Kong'], ['Asia/Tokyo', 'Tokyo'],
-  ['Asia/Seoul', 'Seoul'], ['Australia/Sydney', 'Sydney'], ['Pacific/Auckland', 'Auckland'],
+  ['America/Mexico_City', 'México'], ['America/Sao_Paulo', 'São Paulo'], ['Atlantic/Reykjavik', 'Reykjavík'],
+  ['Europe/London', 'Lontoo'], ['Europe/Lisbon', 'Lissabon'], ['Europe/Paris', 'Pariisi'], ['Europe/Berlin', 'Berliini'],
+  ['Europe/Madrid', 'Madrid'], ['Europe/Rome', 'Rooma'], ['Europe/Amsterdam', 'Amsterdam'], ['Europe/Stockholm', 'Tukholma'],
+  ['Europe/Oslo', 'Oslo'], ['Europe/Copenhagen', 'Kööpenhamina'], ['Europe/Helsinki', 'Helsinki'], ['Europe/Tallinn', 'Tallinna'],
+  ['Europe/Athens', 'Ateena'], ['Europe/Istanbul', 'Istanbul'], ['Europe/Moscow', 'Moskova'], ['Africa/Cairo', 'Kairo'],
+  ['Africa/Johannesburg', 'Johannesburg'], ['Asia/Dubai', 'Dubai'], ['Asia/Kolkata', 'Intia'], ['Asia/Bangkok', 'Bangkok'],
+  ['Asia/Singapore', 'Singapore'], ['Asia/Shanghai', 'Peking'], ['Asia/Hong_Kong', 'Hongkong'], ['Asia/Tokyo', 'Tokio'],
+  ['Asia/Seoul', 'Soul'], ['Australia/Sydney', 'Sydney'], ['Pacific/Auckland', 'Auckland'],
 ];
-const ZONE_OPTIONS = [['', 'Off'], ...ZONES];
+const ZONE_OPTIONS = [['', 'Pois päältä'], ...ZONES];
 const DEFAULT_ZONES = ['America/New_York', 'Asia/Tokyo'];
 
 function zones() {
@@ -225,9 +241,9 @@ function dayIn(tz, d) {
 
 function clockCard() {
   const d = new Date();
-  const own = localZone ? zoneCity(localZone) : 'Local time';
+  const own = localZone ? zoneCity(localZone) : 'Paikallinen aika';
   const extra = zones().filter(Boolean);
-  return `<section class="clock acc-forest" aria-label="Clock">
+  return `<section class="clock acc-forest" aria-label="Kello">
     <div class="clock-main">
       <div class="clock-time"><span data-clock-time="">${timeIn('', d)}</span><span class="clock-sec" data-clock-sec>${pad(d.getSeconds())}</span></div>
       <div class="clock-label">${esc(own)} · <span data-clock-utc>UTC${fmtOffset(utcOffset('', d), '')}</span></div>
@@ -244,8 +260,8 @@ function clockCard() {
 function zoneDiff(tz, d) {
   const diff = utcOffset(tz, d) - utcOffset('', d);
   const local = dayIn('', d), there = dayIn(tz, d);
-  const day = there > local ? ' · tomorrow' : there < local ? ' · yesterday' : '';
-  return (diff === 0 ? 'Same time' : fmtOffset(diff, 'h')) + day;
+  const day = there > local ? ' · huomenna' : there < local ? ' · eilen' : '';
+  return (diff === 0 ? 'Sama aika' : fmtOffset(diff, 'h')) + day;
 }
 
 function tickClock() {
@@ -268,7 +284,7 @@ setInterval(tickClock, 1000);
 function lobby() {
   const t = today();
   const h = new Date().getHours();
-  const greet = h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  const greet = h < 5 ? 'Hyvää yötä' : h < 10 ? 'Hyvää huomenta' : h < 18 ? 'Hyvää päivää' : h < 23 ? 'Hyvää iltaa' : 'Hyvää yötä';
   const name = (db.settings.name || '').trim();
   const evToday = db.events.filter(e => e.date === t).length;
   const due = db.todos.filter(x => !x.done && x.due && (x.due <= t || isLate(x))).length;
@@ -278,17 +294,17 @@ function lobby() {
   <header class="lobby-head">
     <div class="lobby-top">
       <p class="eyebrow">${fmt(t, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-      <button class="icon-btn" data-action="settings" aria-label="Settings">${icon('sliders')}</button>
+      <button class="icon-btn" data-action="settings" aria-label="Asetukset">${icon('sliders')}</button>
     </div>
     <h1 class="greet">${greet}${name ? `,<br><em>${esc(name)}</em>` : '<em>.</em>'}</h1>
     ${clockCard()}
     <div class="today-strip">
-      <a class="pill" href="#/calendar" data-action="cal-today-go"><b>${evToday}</b>${evToday === 1 ? 'event' : 'events'} today</a>
-      <a class="pill" href="#/todo"><b>${due}</b>${due === 1 ? 'task' : 'tasks'} due</a>
-      <a class="pill" href="#/diary"><span class="dot${wrote ? ' ok' : ''}"></span>${wrote ? 'Wrote today' : 'No diary yet today'}</a>
+      <a class="pill" href="#/calendar" data-action="cal-today-go"><b>${evToday}</b>${evToday === 1 ? 'tapahtuma' : 'tapahtumaa'} tänään</a>
+      <a class="pill" href="#/todo"><b>${due}</b>${due === 1 ? 'tehtävä odottaa' : 'tehtävää odottaa'}</a>
+      <a class="pill" href="#/diary"><span class="dot${wrote ? ' ok' : ''}"></span>${wrote ? 'Kirjoitit tänään' : 'Ei merkintää tänään'}</a>
     </div>
   </header>
-  <nav class="tiles" aria-label="Sections">
+  <nav class="tiles" aria-label="Osiot">
     ${SECTIONS.map((s, i) => `
     <a class="tile acc-${s.accent}${i === 0 ? ' wide' : ''}" href="#/${s.id}">
       <span class="t-ic">${icon(s.icon)}</span>
@@ -296,23 +312,23 @@ function lobby() {
       <span class="t-txt"><h2>${s.title}</h2><p>${esc(STATS[s.id]())}</p></span>
     </a>`).join('')}
   </nav>
-  <p class="foot">Kaiken Alku · everything stays on this device</p>`;
+  <p class="foot">Kaiken Alku · kaikki tiedot pysyvät tällä laitteella</p>`;
 }
 
 /* ---------- Diary ---------- */
 
 function diary() {
-  return head('diary', addBtn('new-diary', 'New entry')) +
-    (db.diary.length ? `<label class="search">${icon('search')}<input id="diary-q" type="search" placeholder="Search your pages" value="${esc(ui.diaryQuery)}" autocomplete="off" aria-label="Search diary"></label>` : '') +
+  return head('diary', addBtn('new-diary', 'Uusi merkintä')) +
+    (db.diary.length ? `<label class="search">${icon('search')}<input id="diary-q" type="search" placeholder="Hae merkinnöistä" value="${esc(ui.diaryQuery)}" autocomplete="off" aria-label="Hae päiväkirjasta"></label>` : '') +
     `<div id="diary-list">${diaryList()}</div>`;
 }
 
 function diaryList() {
-  if (!db.diary.length) return empty('diary', 'Your first page is waiting.', 'Write today', 'new-diary');
+  if (!db.diary.length) return empty('diary', 'Ensimmäinen sivu odottaa.', 'Kirjoita tänään', 'new-diary');
   const q = ui.diaryQuery.trim().toLowerCase();
   const list = [...db.diary].sort(byDateDesc)
     .filter(e => !q || `${e.title} ${e.text} ${e.mood}`.toLowerCase().includes(q));
-  if (!list.length) return `<p class="muted center pad">No pages match “${esc(q)}”.</p>`;
+  if (!list.length) return `<p class="muted center pad">Haulla “${esc(q)}” ei löytynyt merkintöjä.</p>`;
 
   let out = '', month = '';
   for (const e of list) {
@@ -325,7 +341,7 @@ function diaryList() {
     out += `<li><button class="entry" data-action="edit-diary" data-id="${e.id}">
       <span class="e-date"><b>${parseISO(e.date).getDate()}</b><small>${fmt(e.date, { weekday: 'short' })}</small></span>
       <span class="e-body">
-        <span class="e-top"><span class="e-title">${esc(e.title || 'Untitled')}</span>${e.mood ? `<span class="tag">${esc(e.mood)}</span>` : ''}</span>
+        <span class="e-top"><span class="e-title">${esc(e.title || 'Nimetön')}</span>${e.mood ? `<span class="tag">${esc(e.mood)}</span>` : ''}</span>
         ${e.text ? `<span class="e-text">${esc(e.text)}</span>` : ''}
       </span></button></li>`;
   }
@@ -335,22 +351,22 @@ function diaryList() {
 function diarySheet(entry) {
   const isNew = !entry;
   openSheet({
-    title: isNew ? 'New entry' : 'Entry',
+    title: isNew ? 'Uusi merkintä' : 'Merkintä',
     values: entry || { date: today() },
     fields: [
-      { name: 'date', label: 'Date', type: 'date', required: true },
-      { name: 'title', label: 'Title', placeholder: 'A few words about the day' },
-      { name: 'mood', label: 'Mood', type: 'chips', options: MOODS },
-      { name: 'text', label: 'Entry', type: 'textarea', rows: 12, placeholder: 'Write freely…' },
+      { name: 'date', label: 'Päivämäärä', type: 'date', required: true },
+      { name: 'title', label: 'Otsikko', placeholder: 'Muutama sana päivästä' },
+      { name: 'mood', label: 'Mieliala', type: 'chips', options: MOODS },
+      { name: 'text', label: 'Merkintä', type: 'textarea', rows: 12, placeholder: 'Kirjoita vapaasti…' },
     ],
     onSave(v) {
-      if (!v.title && !v.text) { toast('Write something first'); return false; }
+      if (!v.title && !v.text) { toast('Kirjoita ensin jotain'); return false; }
       if (isNew) db.diary.push({ id: uid(), created: Date.now(), ...v });
       else Object.assign(entry, v, { updated: Date.now() });
       save('diary'); render();
     },
     onDelete: isNew ? null : () => {
-      if (!confirm('Delete this diary entry?')) return false;
+      if (!confirm('Poistetaanko tämä merkintä?')) return false;
       db.diary = db.diary.filter(x => x !== entry); save('diary'); render();
     },
   });
@@ -379,18 +395,18 @@ function calendar() {
   }
   const showToday = sel !== t || y !== new Date().getFullYear() || m !== new Date().getMonth();
 
-  return head('calendar', addBtn('new-event', 'New event')) + `
+  return head('calendar', addBtn('new-event', 'Uusi tapahtuma')) + `
   <section class="cal">
     <div class="cal-nav">
-      <button class="icon-btn" data-action="cal-prev" aria-label="Previous month">${icon('chevL')}</button>
-      <h2>${first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</h2>
-      <button class="icon-btn" data-action="cal-next" aria-label="Next month">${icon('chevR')}</button>
+      <button class="icon-btn" data-action="cal-prev" aria-label="Edellinen kuukausi">${icon('chevL')}</button>
+      <h2>${cap(first.toLocaleDateString('fi-FI', { month: 'long', year: 'numeric' }))}</h2>
+      <button class="icon-btn" data-action="cal-next" aria-label="Seuraava kuukausi">${icon('chevR')}</button>
     </div>
-    <div class="wk">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(w => `<span>${w}</span>`).join('')}</div>
+    <div class="wk">${['ma', 'ti', 'ke', 'to', 'pe', 'la', 'su'].map(w => `<span>${w}</span>`).join('')}</div>
     <div class="grid">${cells}</div>
     <div class="legend">
-      <span><i class="d-ev"></i>Event</span><span><i class="d-td"></i>Task</span><span><i class="d-di"></i>Diary</span>
-      ${showToday ? '<button class="link" data-action="cal-today">Today</button>' : ''}
+      <span><i class="d-ev"></i>Tapahtuma</span><span><i class="d-td"></i>Tehtävä</span><span><i class="d-di"></i>Päiväkirja</span>
+      ${showToday ? '<button class="link" data-action="cal-today">Tänään</button>' : ''}
     </div>
   </section>
   <section class="agenda">${agenda(sel)}</section>`;
@@ -402,25 +418,25 @@ function agenda(d) {
   const pages = db.diary.filter(e => e.date === d);
   let html = `<h3 class="agenda-h">${longDay(d)}</h3>`;
   if (!evs.length && !tasks.length && !pages.length) {
-    return html + `<div class="empty-sm"><p>Nothing on this day.</p><button class="btn ghost" data-action="new-event">${icon('plus')}Add event</button></div>`;
+    return html + `<div class="empty-sm"><p>Ei mitään tälle päivälle.</p><button class="btn ghost" data-action="new-event">${icon('plus')}Lisää tapahtuma</button></div>`;
   }
   html += '<ul class="agenda-list">';
   for (const e of evs) {
     html += `<li><button class="ag-item" data-action="edit-event" data-id="${e.id}">
-      <span class="ag-time">${e.time || 'All day'}</span>
+      <span class="ag-time">${e.time || 'Koko päivä'}</span>
       <span class="ag-main"><span class="ag-title">${esc(e.title)}</span>${e.note ? `<span class="ag-note">${esc(e.note)}</span>` : ''}</span>
     </button></li>`;
   }
   for (const x of tasks) {
     html += `<li class="ag-task${x.done ? ' done' : ''}">
-      <button class="check" data-action="toggle-todo" data-id="${x.id}" aria-label="${x.done ? 'Mark not done' : 'Mark done'}">${icon('check')}</button>
-      <button class="ag-main" data-action="edit-todo" data-id="${x.id}"><span class="ag-kicker">${x.urgent ? 'Time-sensitive' : 'Task'}${x.time ? ' · ' + x.time : ''}</span><span class="ag-title">${esc(x.title)}</span></button>
+      <button class="check" data-action="toggle-todo" data-id="${x.id}" aria-label="${x.done ? 'Merkitse tekemättömäksi' : 'Merkitse tehdyksi'}">${icon('check')}</button>
+      <button class="ag-main" data-action="edit-todo" data-id="${x.id}"><span class="ag-kicker">${x.urgent ? 'Aikasidonnainen' : 'Tehtävä'}${x.time ? ' · ' + x.time : ''}</span><span class="ag-title">${esc(x.title)}</span></button>
     </li>`;
   }
   for (const e of pages) {
     html += `<li><button class="ag-item" data-action="edit-diary" data-id="${e.id}">
-      <span class="ag-time diary">Diary</span>
-      <span class="ag-main"><span class="ag-title">${esc(e.title || 'Untitled')}</span>${e.text ? `<span class="ag-note clamp">${esc(e.text)}</span>` : ''}</span>
+      <span class="ag-time diary">Päiväkirja</span>
+      <span class="ag-main"><span class="ag-title">${esc(e.title || 'Nimetön')}</span>${e.text ? `<span class="ag-note clamp">${esc(e.text)}</span>` : ''}</span>
     </button></li>`;
   }
   return html + '</ul>';
@@ -429,13 +445,13 @@ function agenda(d) {
 function eventSheet(ev) {
   const isNew = !ev;
   openSheet({
-    title: isNew ? 'New event' : 'Event',
+    title: isNew ? 'Uusi tapahtuma' : 'Tapahtuma',
     values: ev || { date: ui.calSel },
     fields: [
-      { name: 'title', label: 'Title', required: true, placeholder: 'What’s happening?' },
-      { name: 'date', label: 'Date', type: 'date', required: true },
-      { name: 'time', label: 'Time (optional)', type: 'time' },
-      { name: 'note', label: 'Note', type: 'textarea', rows: 3, placeholder: 'Place, people, details…' },
+      { name: 'title', label: 'Otsikko', required: true, placeholder: 'Mitä tapahtuu?' },
+      { name: 'date', label: 'Päivämäärä', type: 'date', required: true },
+      { name: 'time', label: 'Kellonaika (valinnainen)', type: 'time' },
+      { name: 'note', label: 'Muistiinpano', type: 'textarea', rows: 3, placeholder: 'Paikka, ihmiset, yksityiskohdat…' },
     ],
     onSave(v) {
       if (isNew) db.events.push({ id: uid(), created: Date.now(), ...v });
@@ -446,7 +462,7 @@ function eventSheet(ev) {
       render();
     },
     onDelete: isNew ? null : () => {
-      if (!confirm('Delete this event?')) return false;
+      if (!confirm('Poistetaanko tämä tapahtuma?')) return false;
       db.events = db.events.filter(x => x !== ev); save('events'); render();
     },
   });
@@ -462,7 +478,7 @@ function shiftMonth(n) {
 
 /* ---------- To-do ---------- */
 
-const REMINDERS = [['', 'None'], ['0', 'At the time'], ['5', '5 min before'], ['15', '15 min before'], ['60', '1 hour before'], ['1440', '1 day before']];
+const REMINDERS = [['', 'Ei'], ['0', 'Ajallaan'], ['5', '5 min ennen'], ['15', '15 min ennen'], ['60', '1 tunti ennen'], ['1440', '1 päivä ennen']];
 const remindLabel = r => (REMINDERS.find(([v]) => v === String(r ?? '')) || REMINDERS[0])[1];
 const taskKey = t => (t.due || '9999-99-99') + 'T' + (t.time || '99:99');
 
@@ -489,37 +505,37 @@ function todo() {
   const group = (title, items) => items.length ? `${title ? `<h3 class="group">${title}</h3>` : ''}<ul class="tasks">${items.map(taskRow).join('')}</ul>` : '';
   let body = '';
   if (f !== 'done') {
-    body += urgent.length ? group(`${icon('clock')}Time-sensitive`, urgent) + group(normal.length ? 'Other tasks' : '', normal) : group('', normal);
+    body += urgent.length ? group(`${icon('clock')}Aikasidonnaiset`, urgent) + group(normal.length ? 'Muut tehtävät' : '', normal) : group('', normal);
   }
   if (f === 'done') body += group('', finished);
-  if (f === 'all' && finished.length) body += group('Done', finished);
+  if (f === 'all' && finished.length) body += group('Tehdyt', finished);
 
-  const emptyMsg = !total ? empty('todo', 'Nothing to do yet. Add a task above — tap the clock for something time-sensitive.')
-    : f === 'open' ? `<p class="muted center pad">All clear. Enjoy it.</p>`
-    : `<p class="muted center pad">No finished tasks yet.</p>`;
+  const emptyMsg = !total ? empty('todo', 'Ei vielä tehtäviä. Lisää tehtävä yllä — kellosta saat aikasidonnaisen tehtävän.')
+    : f === 'open' ? `<p class="muted center pad">Kaikki tehty. Nauti!</p>`
+    : `<p class="muted center pad">Ei vielä tehtyjä tehtäviä.</p>`;
 
   return head('todo') + `
   <form class="quick-add" data-form="add-todo">
-    <input class="inp" id="todo-input" name="task" placeholder="Add a task…" autocomplete="off" enterkeyhint="done" aria-label="New task">
-    <button type="button" class="add-btn alt" data-action="new-timed" aria-label="Add a time-sensitive task">${icon('clock')}</button>
-    <button class="add-btn" aria-label="Add task">${icon('plus')}</button>
+    <input class="inp" id="todo-input" name="task" placeholder="Lisää tehtävä…" autocomplete="off" enterkeyhint="done" aria-label="Uusi tehtävä">
+    <button type="button" class="add-btn alt" data-action="new-timed" aria-label="Lisää aikasidonnainen tehtävä">${icon('clock')}</button>
+    <button class="add-btn" aria-label="Lisää tehtävä">${icon('plus')}</button>
   </form>
-  ${total ? `<div class="progress"><div class="progress-txt"><span>${done} of ${total} done</span><span>${Math.round(done / total * 100)}%</span></div>
+  ${total ? `<div class="progress"><div class="progress-txt"><span>${done}/${total} tehty</span><span>${Math.round(done / total * 100)}%</span></div>
     <span class="meter"><i style="width:${done / total * 100}%"></i></span></div>
-    ${seg('todo-filter', [['open', 'Open'], ['done', 'Done'], ['all', 'All']], f)}` : ''}
+    ${seg('todo-filter', [['open', 'Avoimet'], ['done', 'Tehdyt'], ['all', 'Kaikki']], f)}` : ''}
   ${body || emptyMsg}
-  ${done && f !== 'open' ? '<button class="link block" data-action="clear-done">Clear completed</button>' : ''}`;
+  ${done && f !== 'open' ? '<button class="link block" data-action="clear-done">Poista tehdyt</button>' : ''}`;
 }
 
 function taskRow(x) {
   const late = isLate(x);
   const when = x.due ? `${relDay(x.due)}${x.time ? ' · ' + x.time : ''}` : '';
   const meta = [
-    when ? `<span class="${late ? 'late' : x.urgent ? 'soon' : ''}">${late ? 'Overdue · ' : ''}${when}</span>` : '',
+    when ? `<span class="${late ? 'late' : x.urgent ? 'soon' : ''}">${late ? 'Myöhässä · ' : ''}${when}</span>` : '',
     x.urgent && x.remind !== '' && x.remind != null && !x.done ? `<span class="bell" title="${remindLabel(x.remind)}">${icon('bell')}${esc(remindLabel(x.remind))}</span>` : '',
   ].filter(Boolean).join('');
   return `<li class="task${x.done ? ' done' : ''}${x.urgent ? ' urgent' : ''}">
-    <button class="check" data-action="toggle-todo" data-id="${x.id}" aria-label="${x.done ? 'Mark not done' : 'Mark done'}">${icon('check')}</button>
+    <button class="check" data-action="toggle-todo" data-id="${x.id}" aria-label="${x.done ? 'Merkitse tekemättömäksi' : 'Merkitse tehdyksi'}">${icon('check')}</button>
     <button class="task-main" data-action="edit-todo" data-id="${x.id}">
       <span class="task-title">${esc(x.title)}</span>
       ${meta ? `<span class="task-meta">${meta}</span>` : ''}
@@ -531,13 +547,13 @@ function nextHour() { const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0
 
 function notifyHelp() {
   let msg;
-  if (!notifySupported()) msg = 'To get notifications, open Kaiken Alku from your Home Screen (iPhone with iOS 16.4 or newer).';
-  else if (Notification.permission === 'denied') msg = 'Notifications are blocked. Turn them on in iPhone Settings → Notifications → Kaiken Alku.';
-  else if (Notification.permission === 'default') msg = 'Kaiken Alku will ask to send you notifications when you save.';
-  else msg = 'Notifications are on. iPhone only lets Kaiken Alku send them while it’s open — for an alert that always arrives, add it to your Calendar too.';
+  if (!notifySupported()) msg = 'Saat ilmoitukset, kun avaat Kaiken Alun kotivalikosta (iPhone, iOS 16.4 tai uudempi).';
+  else if (Notification.permission === 'denied') msg = 'Ilmoitukset on estetty. Salli ne iPhonen asetuksista: Asetukset → Ilmoitukset → Kaiken Alku.';
+  else if (Notification.permission === 'default') msg = 'Kaiken Alku pyytää lupaa ilmoituksiin, kun tallennat.';
+  else msg = 'Ilmoitukset ovat päällä. iPhone antaa Kaiken Alun lähettää niitä vain, kun se on auki — lisää tehtävä myös kalenteriin, niin hälytys tulee varmasti.';
   return `<div class="field notice" data-when="urgent">
     <p class="hint">${msg}</p>
-    <button type="button" class="btn ghost" data-x="ics">${icon('calendar')}Add to iPhone Calendar</button>
+    <button type="button" class="btn ghost" data-x="ics">${icon('calendar')}Lisää iPhonen kalenteriin</button>
   </div>`;
 }
 
@@ -547,22 +563,22 @@ function todoSheet(x, preset) {
     ? { ...x, urgent: x.urgent ? 'on' : '', remind: x.remind ?? '' }
     : { due: today(), time: nextHour(), urgent: 'on', remind: '0', ...preset };
   openSheet({
-    title: isNew ? 'New task' : 'Task',
+    title: isNew ? 'Uusi tehtävä' : 'Tehtävä',
     values,
     fields: [
-      { name: 'title', label: 'Task', required: true, placeholder: 'What needs doing?' },
-      { name: 'urgent', label: 'Time-sensitive', type: 'switch', hint: 'Set an exact time and get notified' },
-      { name: 'due', label: 'Date', type: 'date' },
-      { name: 'time', label: 'Time', type: 'time', when: 'urgent', required: true },
-      { name: 'remind', label: 'Notify me', type: 'chips', when: 'urgent', options: REMINDERS },
-      { name: 'note', label: 'Note', type: 'textarea', rows: 3 },
+      { name: 'title', label: 'Tehtävä', required: true, placeholder: 'Mitä pitää tehdä?' },
+      { name: 'urgent', label: 'Aikasidonnainen', type: 'switch', hint: 'Aseta tarkka aika ja saat ilmoituksen' },
+      { name: 'due', label: 'Päivämäärä', type: 'date' },
+      { name: 'time', label: 'Kellonaika', type: 'time', when: 'urgent', required: true },
+      { name: 'remind', label: 'Muistuta', type: 'chips', when: 'urgent', options: REMINDERS },
+      { name: 'note', label: 'Muistiinpano', type: 'textarea', rows: 3 },
     ],
     extra: notifyHelp(),
     onOpen(form) {
       form.querySelector('[data-x=ics]').onclick = () => {
         const el = form.elements;
-        if (!el.title.value.trim()) { toast('Give the task a name first'); return; }
-        if (!el.time.value) { toast('Set a time first'); return; }
+        if (!el.title.value.trim()) { toast('Anna tehtävälle ensin nimi'); return; }
+        if (!el.time.value) { toast('Aseta ensin kellonaika'); return; }
         downloadICS({
           id: x?.id, title: el.title.value.trim(), note: el.note.value.trim(),
           due: el.due.value || today(), time: el.time.value, remind: el.remind.value,
@@ -591,13 +607,13 @@ function todoSheet(x, preset) {
 function notifySupported() { return 'Notification' in window && 'serviceWorker' in navigator; }
 
 function ensurePermission() {
-  if (!notifySupported()) { toast('Open Kaiken Alku from your Home Screen to get notifications', 4000); return; }
-  if (Notification.permission === 'denied') { toast('Notifications are blocked in iPhone Settings', 4000); return; }
+  if (!notifySupported()) { toast('Avaa Kaiken Alku kotivalikosta, niin saat ilmoituksia', 4000); return; }
+  if (Notification.permission === 'denied') { toast('Ilmoitukset on estetty iPhonen asetuksissa', 4000); return; }
   if (Notification.permission === 'default') {
     try {
       Promise.resolve(Notification.requestPermission()).then(p => {
-        if (p === 'granted') toast('Notifications on');
-        else toast('Notifications stay off — reminders show inside Kaiken Alku', 4000);
+        if (p === 'granted') toast('Ilmoitukset päällä');
+        else toast('Ilmoitukset pois — muistutukset näkyvät sovelluksessa', 4000);
       }).catch(() => {});
     } catch (_) { /* ignore */ }
   }
@@ -622,8 +638,8 @@ function checkReminders() {
 }
 
 function notify(t) {
-  const when = `${relDay(t.due)} at ${t.time}`;
-  const body = Number(t.remind) ? `${remindLabel(t.remind).replace(' before', '')} to go · ${when}` : `Now · ${when}`;
+  const when = `${relDay(t.due)} klo ${t.time}`;
+  const body = Number(t.remind) ? `${remindLabel(t.remind).replace(' ennen', '')} jäljellä · ${when}` : `Nyt · ${when}`;
   if (!document.hidden) toast(`⏰ ${t.title} · ${t.time}`, 6000);
   if (notifySupported() && Notification.permission === 'granted') {
     navigator.serviceWorker.getRegistration().then(reg => {
@@ -657,7 +673,7 @@ function downloadICS(t) {
   const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `${t.title.replace(/[^\w\- ]+/g, '').trim().slice(0, 40) || 'task'}.ics`;
+  a.download = `${t.title.replace(/[^\p{L}\p{N}\- ]+/gu, '').trim().slice(0, 40) || 'tehtava'}.ics`;
   document.body.append(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
@@ -672,14 +688,14 @@ function goalProgress(g) {
 }
 
 function goals() {
-  if (!db.goals.length) return head('goals', addBtn('new-goal', 'New goal')) + empty('goals', 'What do you want to achieve?', 'Set a goal', 'new-goal');
+  if (!db.goals.length) return head('goals', addBtn('new-goal', 'Uusi tavoite')) + empty('goals', 'Mitä haluat saavuttaa?', 'Aseta tavoite', 'new-goal');
   const active = db.goals.filter(g => !g.done)
     .sort((a, b) => (a.target || '9999').localeCompare(b.target || '9999') || a.created - b.created);
   const achieved = db.goals.filter(g => g.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
-  return head('goals', addBtn('new-goal', 'New goal')) + `
+  return head('goals', addBtn('new-goal', 'Uusi tavoite')) + `
     ${active.length ? `<div class="goal-list">${active.map(goalCard).join('')}</div>`
-      : '<p class="muted center pad">Every goal achieved. Time to set a new one.</p>'}
-    ${achieved.length ? `<h3 class="group">Achieved · ${achieved.length}</h3><div class="goal-list">${achieved.map(goalCard).join('')}</div>` : ''}`;
+      : '<p class="muted center pad">Kaikki tavoitteet saavutettu. Aika asettaa uusi!</p>'}
+    ${achieved.length ? `<h3 class="group">Saavutetut · ${achieved.length}</h3><div class="goal-list">${achieved.map(goalCard).join('')}</div>` : ''}`;
 }
 
 function goalCard(g) {
@@ -688,8 +704,8 @@ function goalCard(g) {
   const steps = g.steps || [];
   const meta = [
     g.area,
-    g.target ? `${g.done ? 'Target' : 'By'} ${relDay(g.target)}` : '',
-    steps.length ? `${steps.filter(s => s.done).length}/${steps.length} steps` : '',
+    g.target ? `${g.done ? 'Tavoitepäivä' : 'Viimeistään'} ${relDay(g.target).toLowerCase()}` : '',
+    steps.length ? `${steps.filter(s => s.done).length}/${steps.length} vaihetta` : '',
   ].filter(Boolean).join(' · ');
 
   return `<article class="goal${open ? ' open' : ''}${g.done ? ' achieved' : ''}">
@@ -700,20 +716,20 @@ function goalCard(g) {
     </button>
     ${open ? `<div class="goal-body">
       ${g.why ? `<p class="goal-why">${esc(g.why)}</p>` : ''}
-      <h4 class="mini">Steps</h4>
+      <h4 class="mini">Vaiheet</h4>
       ${steps.length ? `<ul class="steps">${steps.map(s => `
         <li class="${s.done ? 'done' : ''}">
-          <button class="check sm" data-action="toggle-step" data-id="${g.id}" data-step="${s.id}" aria-label="Toggle step">${icon('check')}</button>
+          <button class="check sm" data-action="toggle-step" data-id="${g.id}" data-step="${s.id}" aria-label="Merkitse vaihe">${icon('check')}</button>
           <span>${esc(s.text)}</span>
-          <button class="x" data-action="del-step" data-id="${g.id}" data-step="${s.id}" aria-label="Remove step">${icon('close')}</button>
-        </li>`).join('')}</ul>` : '<p class="hint">Break it into small steps — progress fills in as you tick them off.</p>'}
+          <button class="x" data-action="del-step" data-id="${g.id}" data-step="${s.id}" aria-label="Poista vaihe">${icon('close')}</button>
+        </li>`).join('')}</ul>` : '<p class="hint">Pilko tavoite pieniin vaiheisiin — edistyminen täyttyy, kun ruksaat niitä.</p>'}
       <form class="step-add" data-form="add-step" data-id="${g.id}">
-        <input class="inp" name="step" placeholder="Add a step…" autocomplete="off" enterkeyhint="done" aria-label="New step">
-        <button class="add-btn sm" aria-label="Add step">${icon('plus')}</button>
+        <input class="inp" name="step" placeholder="Lisää vaihe…" autocomplete="off" enterkeyhint="done" aria-label="Uusi vaihe">
+        <button class="add-btn sm" aria-label="Lisää vaihe">${icon('plus')}</button>
       </form>
       <div class="goal-actions">
-        <button class="btn ghost" data-action="edit-goal" data-id="${g.id}">Edit</button>
-        <button class="btn ${g.done ? 'ghost' : 'solid'}" data-action="achieve-goal" data-id="${g.id}">${g.done ? 'Reopen' : 'Mark achieved'}</button>
+        <button class="btn ghost" data-action="edit-goal" data-id="${g.id}">Muokkaa</button>
+        <button class="btn ${g.done ? 'ghost' : 'solid'}" data-action="achieve-goal" data-id="${g.id}">${g.done ? 'Avaa uudelleen' : `${icon('check')}Saavutettu`}</button>
       </div>
     </div>` : ''}
   </article>`;
@@ -722,13 +738,13 @@ function goalCard(g) {
 function goalSheet(g) {
   const isNew = !g;
   openSheet({
-    title: isNew ? 'New goal' : 'Goal',
+    title: isNew ? 'Uusi tavoite' : 'Tavoite',
     values: g || {},
     fields: [
-      { name: 'title', label: 'Goal', required: true, placeholder: 'Run a half marathon' },
-      { name: 'why', label: 'Why it matters', type: 'textarea', rows: 3 },
-      { name: 'target', label: 'Target date', type: 'date' },
-      { name: 'area', label: 'Area of life', type: 'chips', options: AREAS },
+      { name: 'title', label: 'Tavoite', required: true, placeholder: 'Juokse puolimaraton' },
+      { name: 'why', label: 'Miksi se on tärkeää', type: 'textarea', rows: 3 },
+      { name: 'target', label: 'Tavoitepäivä', type: 'date' },
+      { name: 'area', label: 'Elämänalue', type: 'chips', options: AREAS },
     ],
     onSave(v) {
       if (isNew) { const id = uid(); db.goals.push({ id, created: Date.now(), steps: [], done: false, ...v }); ui.goalOpen = id; }
@@ -736,7 +752,7 @@ function goalSheet(g) {
       save('goals'); render();
     },
     onDelete: isNew ? null : () => {
-      if (!confirm('Delete this goal and its steps?')) return false;
+      if (!confirm('Poistetaanko tavoite vaiheineen?')) return false;
       db.goals = db.goals.filter(x => x !== g); save('goals'); render();
     },
   });
@@ -745,21 +761,21 @@ function goalSheet(g) {
 /* ---------- Dreams ---------- */
 
 function dreams() {
-  if (!db.dreams.length) return head('dreams', addBtn('new-dream', 'New dream')) + empty('dreams', 'Dream big. Write it down.', 'Add a dream', 'new-dream');
+  if (!db.dreams.length) return head('dreams', addBtn('new-dream', 'Uusi haave')) + empty('dreams', 'Haaveile isosti. Kirjoita se ylös.', 'Lisää haave', 'new-dream');
   const f = ui.dreamFilter;
   const lived = db.dreams.filter(d => d.status === 'Lived').length;
   const list = db.dreams.filter(d => (d.status === 'Lived' ? 'Lived' : 'Dreaming') === f).sort((a, b) => b.created - a.created);
-  return head('dreams', addBtn('new-dream', 'New dream')) +
-    seg('dream-filter', [['Dreaming', `Dreaming · ${db.dreams.length - lived}`], ['Lived', `Lived · ${lived}`]], f) +
+  return head('dreams', addBtn('new-dream', 'Uusi haave')) +
+    seg('dream-filter', [['Dreaming', `Haaveissa · ${db.dreams.length - lived}`], ['Lived', `Toteutuneet · ${lived}`]], f) +
     (list.length ? `<div class="dream-list">${list.map(dreamCard).join('')}</div>`
-      : `<p class="muted center pad">${f === 'Lived' ? 'Dreams you’ve lived will gather here.' : 'Every dream lived. Dream again.'}</p>`);
+      : `<p class="muted center pad">${f === 'Lived' ? 'Toteutuneet haaveet kerääntyvät tänne.' : 'Kaikki haaveet toteutuneet. Haaveile lisää!'}</p>`);
 }
 
 function dreamCard(d) {
   const c = Math.max(0, DREAM_CATS.indexOf(d.category)) % 4;
   return `<button class="dream c${c}" data-action="edit-dream" data-id="${d.id}">
-    <span class="dream-top"><span class="tag">${esc(d.category || 'Dream')}</span>
-      ${d.status === 'Lived' ? `<span class="lived">${icon('check')}Lived${d.livedAt ? ' · ' + relDay(d.livedAt) : ''}</span>` : ''}</span>
+    <span class="dream-top"><span class="tag">${esc(d.category || 'Haave')}</span>
+      ${d.status === 'Lived' ? `<span class="lived">${icon('check')}Toteutunut${d.livedAt ? ' · ' + relDay(d.livedAt).toLowerCase() : ''}</span>` : ''}</span>
     <span class="dream-title">${esc(d.title)}</span>
     ${d.text ? `<span class="dream-text">${esc(d.text)}</span>` : ''}
   </button>`;
@@ -768,13 +784,13 @@ function dreamCard(d) {
 function dreamSheet(d) {
   const isNew = !d;
   openSheet({
-    title: isNew ? 'New dream' : 'Dream',
+    title: isNew ? 'Uusi haave' : 'Haave',
     values: d || { status: 'Dreaming' },
     fields: [
-      { name: 'title', label: 'Dream', required: true, placeholder: 'See the northern lights from a glass cabin' },
-      { name: 'category', label: 'Kind', type: 'chips', options: DREAM_CATS },
-      { name: 'text', label: 'Picture it', type: 'textarea', rows: 5, placeholder: 'Where are you? Who is with you? How does it feel?' },
-      { name: 'status', label: 'Status', type: 'chips', options: ['Dreaming', 'Lived'] },
+      { name: 'title', label: 'Haave', required: true, placeholder: 'Näe revontulet lasi-iglusta' },
+      { name: 'category', label: 'Laji', type: 'chips', options: DREAM_CATS },
+      { name: 'text', label: 'Kuvittele se', type: 'textarea', rows: 5, placeholder: 'Missä olet? Kuka on kanssasi? Miltä se tuntuu?' },
+      { name: 'status', label: 'Tila', type: 'chips', options: [['Dreaming', 'Haaveena'], ['Lived', 'Toteutunut']] },
     ],
     onSave(v) {
       v.status = v.status === 'Lived' ? 'Lived' : 'Dreaming';
@@ -789,7 +805,7 @@ function dreamSheet(d) {
       save('dreams'); render();
     },
     onDelete: isNew ? null : () => {
-      if (!confirm('Delete this dream?')) return false;
+      if (!confirm('Poistetaanko tämä haave?')) return false;
       db.dreams = db.dreams.filter(x => x !== d); save('dreams'); render();
     },
   });
@@ -799,24 +815,24 @@ function dreamSheet(d) {
 
 function openSettings() {
   openSheet({
-    title: 'Settings',
-    saveLabel: 'Done',
+    title: 'Asetukset',
+    saveLabel: 'Valmis',
     values: { name: db.settings.name, zone1: zones()[0], zone2: zones()[1] },
     fields: [
-      { name: 'name', label: 'Your name', placeholder: 'Shown in the lobby greeting' },
-      { name: 'zone1', label: 'World clock 1', type: 'select', options: ZONE_OPTIONS },
-      { name: 'zone2', label: 'World clock 2', type: 'select', options: ZONE_OPTIONS },
+      { name: 'name', label: 'Nimesi', placeholder: 'Näkyy etusivun tervehdyksessä' },
+      { name: 'zone1', label: 'Maailmankello 1', type: 'select', options: ZONE_OPTIONS },
+      { name: 'zone2', label: 'Maailmankello 2', type: 'select', options: ZONE_OPTIONS },
     ],
     extra: `
-      <div class="field"><span>Backup</span>
-        <p class="hint">Everything is saved only on this device. Export a backup now and then so nothing gets lost.</p>
+      <div class="field"><span>Varmuuskopio</span>
+        <p class="hint">Kaikki tallentuu vain tälle laitteelle. Tee varmuuskopio silloin tällöin, ettei mitään katoa.</p>
         <div class="row">
-          <button type="button" class="btn ghost" data-x="export">Export backup</button>
-          <label class="btn ghost">Import backup<input type="file" accept="application/json,.json" class="vh" data-x="import"></label>
+          <button type="button" class="btn ghost" data-x="export">Vie varmuuskopio</button>
+          <label class="btn ghost">Tuo varmuuskopio<input type="file" accept="application/json,.json" class="vh" data-x="import"></label>
         </div>
       </div>
-      <div class="field"><span>Danger zone</span>
-        <button type="button" class="btn danger" data-x="erase">${icon('trash')}Erase all data</button>
+      <div class="field"><span>Vaara-alue</span>
+        <button type="button" class="btn danger" data-x="erase">${icon('trash')}Poista kaikki tiedot</button>
       </div>`,
     onOpen(form) {
       form.querySelector('[data-x=export]').onclick = exportData;
@@ -831,10 +847,10 @@ function exportData() {
   const data = { app: 'kaiken-alku', version: 1, exported: new Date().toISOString() };
   KEYS.forEach(k => { data[k] = db[k]; });
   const json = JSON.stringify(data, null, 2);
-  const name = `kaiken-alku-backup-${today()}.json`;
+  const name = `kaiken-alku-varmuuskopio-${today()}.json`;
   const file = new File([json], name, { type: 'application/json' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    navigator.share({ files: [file], title: 'Kaiken Alku backup' }).catch(() => {});
+    navigator.share({ files: [file], title: 'Kaiken Alku -varmuuskopio' }).catch(() => {});
     return;
   }
   const a = document.createElement('a');
@@ -852,24 +868,24 @@ function importData(file) {
     try {
       const data = JSON.parse(reader.result);
       if (!data || !['kaiken-alku', 'grove'].includes(data.app)) throw new Error('not a Kaiken Alku backup');
-      if (!confirm('Replace everything on this device with this backup?')) return;
+      if (!confirm('Korvataanko kaikki tämän laitteen tiedot tällä varmuuskopiolla?')) return;
       KEYS.forEach(k => {
         const ok = Array.isArray(DEFAULTS[k]) ? Array.isArray(data[k]) : data[k] && typeof data[k] === 'object';
         db[k] = ok ? data[k] : clone(DEFAULTS[k]);
         save(k);
       });
-      closeSheet(); render(); toast('Backup restored');
+      closeSheet(); render(); toast('Varmuuskopio palautettu');
     } catch (_) {
-      toast('That file isn’t a Kaiken Alku backup');
+      toast('Tiedosto ei ole Kaiken Alun varmuuskopio');
     }
   };
   reader.readAsText(file);
 }
 
 function eraseAll() {
-  if (!confirm('Erase every diary entry, event, task, goal and dream on this device? This cannot be undone.')) return;
+  if (!confirm('Poistetaanko kaikki merkinnät, tapahtumat, tehtävät, tavoitteet ja haaveet tältä laitteelta? Tätä ei voi perua.')) return;
   KEYS.forEach(k => { db[k] = clone(DEFAULTS[k]); try { localStorage.removeItem(PREFIX + k); } catch (_) {} });
-  closeSheet(); render(); toast('All data erased');
+  closeSheet(); render(); toast('Kaikki tiedot poistettu');
 }
 
 /* ---------- Bottom sheet ---------- */
@@ -903,14 +919,14 @@ function openSheet(o) {
   const values = o.values || {};
   sheet.innerHTML = `<form class="sheet-form" novalidate>
     <div class="sheet-head">
-      <button type="button" class="link" data-close>Cancel</button>
+      <button type="button" class="link" data-close>Peruuta</button>
       <h2>${esc(o.title)}</h2>
-      <button type="submit" class="link strong">${o.saveLabel || 'Save'}</button>
+      <button type="submit" class="link strong">${o.saveLabel || 'Tallenna'}</button>
     </div>
     <div class="sheet-body">
       ${o.fields.map(f => (f.when ? `<div class="when" data-when="${f.when}">${field(f, values)}</div>` : field(f, values))).join('')}
       ${o.extra || ''}
-      ${o.onDelete ? `<button type="button" class="btn danger" data-delete>${icon('trash')}Delete</button>` : ''}
+      ${o.onDelete ? `<button type="button" class="btn danger" data-delete>${icon('trash')}Poista</button>` : ''}
     </div>
   </form>`;
   const form = sheet.firstElementChild;
@@ -941,7 +957,7 @@ function openSheet(o) {
       if (f.required && !out[f.name]) {
         const el = form.elements[f.name];
         if (el && el.focus) { el.classList.add('invalid'); el.focus(); }
-        toast(`${f.label} is needed`);
+        toast(`${f.label} puuttuu`);
         return;
       }
     }
@@ -1012,7 +1028,7 @@ const ACTIONS = {
   },
   'todo-filter'(d) { ui.todoFilter = d.f; render(); },
   'clear-done'() {
-    if (!confirm('Remove all completed tasks?')) return;
+    if (!confirm('Poistetaanko kaikki tehdyt tehtävät?')) return;
     db.todos = db.todos.filter(x => !x.done); save('todos'); render();
   },
 
@@ -1034,7 +1050,7 @@ const ACTIONS = {
     if (!g) return;
     g.done = !g.done; g.doneAt = g.done ? Date.now() : null;
     save('goals'); render();
-    if (g.done) toast('Goal achieved — well done');
+    if (g.done) toast('Tavoite saavutettu — hienoa!');
   },
 
   'new-dream': () => dreamSheet(),
