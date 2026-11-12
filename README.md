@@ -1,4 +1,4 @@
-# Grove
+# Kaiken Alku
 
 A personal website / home-screen app: **Diary, Calendar, To-do, Goals and Dreams**, reached from one lobby.
 Forest green, brown and black, minimal and modern. Built for iPhone, works in any browser.

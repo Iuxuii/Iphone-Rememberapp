@@ -1,11 +1,11 @@
 'use strict';
 
-/* Grove — a personal space with a diary, calendar, to-do list, goals and dreams.
+/* Kaiken Alku — a personal space with a diary, calendar, to-do list, goals and dreams.
    Everything is stored in this browser only (localStorage). */
 
 /* ---------- Storage ---------- */
 
-const PREFIX = 'grove.';
+const PREFIX = 'grove.'; // storage key from the app's first name — kept so saved data isn't lost
 const DEFAULTS = { diary: [], events: [], todos: [], goals: [], dreams: [], settings: { name: '' } };
 const KEYS = Object.keys(DEFAULTS);
 const clone = v => JSON.parse(JSON.stringify(v));
@@ -170,6 +170,101 @@ const STATS = {
   },
 };
 
+/* ---------- Clock ---------- */
+
+const ZONES = [
+  ['Pacific/Honolulu', 'Honolulu'], ['America/Los_Angeles', 'Los Angeles'], ['America/Denver', 'Denver'],
+  ['America/Chicago', 'Chicago'], ['America/New_York', 'New York'], ['America/Toronto', 'Toronto'],
+  ['America/Mexico_City', 'Mexico City'], ['America/Sao_Paulo', 'São Paulo'], ['Atlantic/Reykjavik', 'Reykjavík'],
+  ['Europe/London', 'London'], ['Europe/Lisbon', 'Lisbon'], ['Europe/Paris', 'Paris'], ['Europe/Berlin', 'Berlin'],
+  ['Europe/Madrid', 'Madrid'], ['Europe/Rome', 'Rome'], ['Europe/Amsterdam', 'Amsterdam'], ['Europe/Stockholm', 'Stockholm'],
+  ['Europe/Oslo', 'Oslo'], ['Europe/Copenhagen', 'Copenhagen'], ['Europe/Helsinki', 'Helsinki'], ['Europe/Tallinn', 'Tallinn'],
+  ['Europe/Athens', 'Athens'], ['Europe/Istanbul', 'Istanbul'], ['Europe/Moscow', 'Moscow'], ['Africa/Cairo', 'Cairo'],
+  ['Africa/Johannesburg', 'Johannesburg'], ['Asia/Dubai', 'Dubai'], ['Asia/Kolkata', 'India'], ['Asia/Bangkok', 'Bangkok'],
+  ['Asia/Singapore', 'Singapore'], ['Asia/Shanghai', 'Beijing'], ['Asia/Hong_Kong', 'Hong Kong'], ['Asia/Tokyo', 'Tokyo'],
+  ['Asia/Seoul', 'Seoul'], ['Australia/Sydney', 'Sydney'], ['Pacific/Auckland', 'Auckland'],
+];
+const ZONE_OPTIONS = [['', 'Off'], ...ZONES];
+const DEFAULT_ZONES = ['America/New_York', 'Asia/Tokyo'];
+
+function zones() {
+  const z = Array.isArray(db.settings.zones) ? db.settings.zones : DEFAULT_ZONES;
+  return [z[0] ?? '', z[1] ?? ''];
+}
+function zoneCity(tz) {
+  const known = ZONES.find(([id]) => id === tz);
+  return known ? known[1] : (tz.split('/').pop() || tz).replace(/_/g, ' ');
+}
+const localZone = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (_) { return ''; } })();
+
+// Minutes ahead of UTC for a time zone at a given moment.
+function utcOffset(tz, d) {
+  if (!tz) return -d.getTimezoneOffset();
+  const p = {};
+  new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric',
+  }).formatToParts(d).forEach(x => { p[x.type] = x.value; });
+  const asUTC = Date.UTC(+p.year, p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+  return Math.round((asUTC - Math.floor(d.getTime() / 1000) * 1000) / 60000);
+}
+function fmtOffset(min, unit) {
+  const sign = min < 0 ? '−' : '+';
+  const a = Math.abs(min), h = Math.floor(a / 60), m = a % 60;
+  return `${sign}${h}${m ? ':' + pad(m) : ''}${unit}`;
+}
+function timeIn(tz, d) {
+  const o = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
+  if (tz) o.timeZone = tz;
+  return d.toLocaleTimeString('en-GB', o);
+}
+function dayIn(tz, d) {
+  const o = { year: 'numeric', month: '2-digit', day: '2-digit' };
+  if (tz) o.timeZone = tz;
+  return d.toLocaleDateString('en-CA', o); // YYYY-MM-DD
+}
+
+function clockCard() {
+  const d = new Date();
+  const own = localZone ? zoneCity(localZone) : 'Local time';
+  const extra = zones().filter(Boolean);
+  return `<section class="clock acc-forest" aria-label="Clock">
+    <div class="clock-main">
+      <div class="clock-time"><span data-clock-time="">${timeIn('', d)}</span><span class="clock-sec" data-clock-sec>${pad(d.getSeconds())}</span></div>
+      <div class="clock-label">${esc(own)} · <span data-clock-utc>UTC${fmtOffset(utcOffset('', d), '')}</span></div>
+    </div>
+    ${extra.length ? `<div class="clock-zones">${extra.map(tz => `
+      <div class="zone">
+        <span class="z-city">${esc(zoneCity(tz))}</span>
+        <span class="z-time" data-clock-time="${esc(tz)}">${timeIn(tz, d)}</span>
+        <span class="z-diff" data-clock-diff="${esc(tz)}">${zoneDiff(tz, d)}</span>
+      </div>`).join('')}</div>` : ''}
+  </section>`;
+}
+
+function zoneDiff(tz, d) {
+  const diff = utcOffset(tz, d) - utcOffset('', d);
+  const local = dayIn('', d), there = dayIn(tz, d);
+  const day = there > local ? ' · tomorrow' : there < local ? ' · yesterday' : '';
+  return (diff === 0 ? 'Same time' : fmtOffset(diff, 'h')) + day;
+}
+
+function tickClock() {
+  if (ui.view !== 'lobby' || document.hidden) return;
+  const d = new Date();
+  app.querySelectorAll('[data-clock-time]').forEach(el => {
+    const t = timeIn(el.dataset.clockTime, d);
+    if (el.textContent !== t) el.textContent = t;
+  });
+  const sec = app.querySelector('[data-clock-sec]');
+  if (sec) sec.textContent = pad(d.getSeconds());
+  if (d.getSeconds() === 0) {
+    app.querySelectorAll('[data-clock-diff]').forEach(el => { el.textContent = zoneDiff(el.dataset.clockDiff, d); });
+    const utc = app.querySelector('[data-clock-utc]');
+    if (utc) utc.textContent = `UTC${fmtOffset(utcOffset('', d), '')}`;
+  }
+}
+setInterval(tickClock, 1000);
+
 function lobby() {
   const t = today();
   const h = new Date().getHours();
@@ -186,6 +281,7 @@ function lobby() {
       <button class="icon-btn" data-action="settings" aria-label="Settings">${icon('sliders')}</button>
     </div>
     <h1 class="greet">${greet}${name ? `,<br><em>${esc(name)}</em>` : '<em>.</em>'}</h1>
+    ${clockCard()}
     <div class="today-strip">
       <a class="pill" href="#/calendar" data-action="cal-today-go"><b>${evToday}</b>${evToday === 1 ? 'event' : 'events'} today</a>
       <a class="pill" href="#/todo"><b>${due}</b>${due === 1 ? 'task' : 'tasks'} due</a>
@@ -200,7 +296,7 @@ function lobby() {
       <span class="t-txt"><h2>${s.title}</h2><p>${esc(STATS[s.id]())}</p></span>
     </a>`).join('')}
   </nav>
-  <p class="foot">Grove · everything stays on this device</p>`;
+  <p class="foot">Kaiken Alku · everything stays on this device</p>`;
 }
 
 /* ---------- Diary ---------- */
@@ -435,10 +531,10 @@ function nextHour() { const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0
 
 function notifyHelp() {
   let msg;
-  if (!notifySupported()) msg = 'To get notifications, open Grove from your Home Screen (iPhone with iOS 16.4 or newer).';
-  else if (Notification.permission === 'denied') msg = 'Notifications are blocked. Turn them on in iPhone Settings → Notifications → Grove.';
-  else if (Notification.permission === 'default') msg = 'Grove will ask to send you notifications when you save.';
-  else msg = 'Notifications are on. iPhone only lets Grove send them while it’s open — for an alert that always arrives, add it to your Calendar too.';
+  if (!notifySupported()) msg = 'To get notifications, open Kaiken Alku from your Home Screen (iPhone with iOS 16.4 or newer).';
+  else if (Notification.permission === 'denied') msg = 'Notifications are blocked. Turn them on in iPhone Settings → Notifications → Kaiken Alku.';
+  else if (Notification.permission === 'default') msg = 'Kaiken Alku will ask to send you notifications when you save.';
+  else msg = 'Notifications are on. iPhone only lets Kaiken Alku send them while it’s open — for an alert that always arrives, add it to your Calendar too.';
   return `<div class="field notice" data-when="urgent">
     <p class="hint">${msg}</p>
     <button type="button" class="btn ghost" data-x="ics">${icon('calendar')}Add to iPhone Calendar</button>
@@ -495,13 +591,13 @@ function todoSheet(x, preset) {
 function notifySupported() { return 'Notification' in window && 'serviceWorker' in navigator; }
 
 function ensurePermission() {
-  if (!notifySupported()) { toast('Open Grove from your Home Screen to get notifications', 4000); return; }
+  if (!notifySupported()) { toast('Open Kaiken Alku from your Home Screen to get notifications', 4000); return; }
   if (Notification.permission === 'denied') { toast('Notifications are blocked in iPhone Settings', 4000); return; }
   if (Notification.permission === 'default') {
     try {
       Promise.resolve(Notification.requestPermission()).then(p => {
         if (p === 'granted') toast('Notifications on');
-        else toast('Notifications stay off — reminders show inside Grove', 4000);
+        else toast('Notifications stay off — reminders show inside Kaiken Alku', 4000);
       }).catch(() => {});
     } catch (_) { /* ignore */ }
   }
@@ -547,9 +643,9 @@ function downloadICS(t) {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const mins = t.remind === '' || t.remind == null ? 0 : Number(t.remind);
   const lines = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Grove//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kaiken Alku//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    `UID:${t.id || uid()}@grove`,
+    `UID:${t.id || uid()}@kaiken-alku`,
     `DTSTAMP:${stamp}`,
     `DTSTART:${y}${mo}${d}T${h}${mi}00`,
     'DURATION:PT15M',
@@ -705,8 +801,12 @@ function openSettings() {
   openSheet({
     title: 'Settings',
     saveLabel: 'Done',
-    values: { name: db.settings.name },
-    fields: [{ name: 'name', label: 'Your name', placeholder: 'Shown in the lobby greeting' }],
+    values: { name: db.settings.name, zone1: zones()[0], zone2: zones()[1] },
+    fields: [
+      { name: 'name', label: 'Your name', placeholder: 'Shown in the lobby greeting' },
+      { name: 'zone1', label: 'World clock 1', type: 'select', options: ZONE_OPTIONS },
+      { name: 'zone2', label: 'World clock 2', type: 'select', options: ZONE_OPTIONS },
+    ],
     extra: `
       <div class="field"><span>Backup</span>
         <p class="hint">Everything is saved only on this device. Export a backup now and then so nothing gets lost.</p>
@@ -723,18 +823,18 @@ function openSettings() {
       form.querySelector('[data-x=import]').onchange = e => importData(e.target.files[0]);
       form.querySelector('[data-x=erase]').onclick = eraseAll;
     },
-    onSave(v) { db.settings.name = v.name; save('settings'); render(); },
+    onSave(v) { db.settings.name = v.name; db.settings.zones = [v.zone1, v.zone2]; save('settings'); render(); },
   });
 }
 
 function exportData() {
-  const data = { app: 'grove', version: 1, exported: new Date().toISOString() };
+  const data = { app: 'kaiken-alku', version: 1, exported: new Date().toISOString() };
   KEYS.forEach(k => { data[k] = db[k]; });
   const json = JSON.stringify(data, null, 2);
-  const name = `grove-backup-${today()}.json`;
+  const name = `kaiken-alku-backup-${today()}.json`;
   const file = new File([json], name, { type: 'application/json' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    navigator.share({ files: [file], title: 'Grove backup' }).catch(() => {});
+    navigator.share({ files: [file], title: 'Kaiken Alku backup' }).catch(() => {});
     return;
   }
   const a = document.createElement('a');
@@ -751,7 +851,7 @@ function importData(file) {
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
-      if (!data || data.app !== 'grove') throw new Error('not a Grove backup');
+      if (!data || !['kaiken-alku', 'grove'].includes(data.app)) throw new Error('not a Kaiken Alku backup');
       if (!confirm('Replace everything on this device with this backup?')) return;
       KEYS.forEach(k => {
         const ok = Array.isArray(DEFAULTS[k]) ? Array.isArray(data[k]) : data[k] && typeof data[k] === 'object';
@@ -760,7 +860,7 @@ function importData(file) {
       });
       closeSheet(); render(); toast('Backup restored');
     } catch (_) {
-      toast('That file isn’t a Grove backup');
+      toast('That file isn’t a Kaiken Alku backup');
     }
   };
   reader.readAsText(file);
@@ -787,6 +887,10 @@ function field(f, values) {
     return `<fieldset class="field"><legend>${f.label}</legend><div class="chips">${opts.map(([v, l]) =>
       `<label class="chip-opt"><input type="radio" name="${f.name}" value="${esc(v)}"${String(v) === String(val) ? ' checked data-was="1"' : ''}><span>${esc(l)}</span></label>`
     ).join('')}</div></fieldset>`;
+  }
+  if (f.type === 'select') {
+    return `<label class="field"><span>${f.label}</span><select class="inp" name="${f.name}">${f.options.map(([v, l]) =>
+      `<option value="${esc(v)}"${String(v) === String(val) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
   }
   if (f.type === 'switch') {
     return `<label class="switch-row"><span class="sw-txt"><b>${f.label}</b>${f.hint ? `<small>${esc(f.hint)}</small>` : ''}</span>
@@ -972,7 +1076,7 @@ function route() {
   render();
   app.classList.remove('enter'); void app.offsetWidth; app.classList.add('enter');
   window.scrollTo(0, 0);
-  document.title = ui.view === 'lobby' ? 'Grove' : `${sec(ui.view).title} · Grove`;
+  document.title = ui.view === 'lobby' ? 'Kaiken Alku' : `${sec(ui.view).title} · Kaiken Alku`;
 }
 
 app.addEventListener('click', e => {

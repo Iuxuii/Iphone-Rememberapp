@@ -1,5 +1,5 @@
 // Offline support: use the network when available (so updates show up), fall back to the cache.
-const CACHE = 'grove-v2';
+const CACHE = 'kaiken-alku-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -37,7 +37,7 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// Tapping a reminder opens Grove on the to-do list.
+// Tapping a reminder opens Kaiken Alku on the to-do list.
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const url = new URL((e.notification.data && e.notification.data.url) || './#/todo', self.registration.scope).href;
