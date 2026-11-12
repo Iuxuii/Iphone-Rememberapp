@@ -5,6 +5,7 @@
 
 /* ---------- Storage ---------- */
 
+const APP_VERSION = '7'; // keep in step with sw.js and index.html
 const PREFIX = 'grove.'; // storage key from the app's first name — kept so saved data isn't lost
 const DEFAULTS = { diary: [], events: [], todos: [], goals: [], dreams: [], topics: [], notes: [], settings: { name: '' } };
 const KEYS = Object.keys(DEFAULTS);
@@ -338,7 +339,7 @@ function lobby() {
       <span class="t-txt"><h2>${s.title}</h2><p>${esc(STATS[s.id]())}</p></span>
     </a>`).join('')}
   </nav>
-  <p class="foot">Kaiken Alku · kaikki tiedot pysyvät tällä laitteella</p>`;
+  <p class="foot">Kaiken Alku · versio ${APP_VERSION} · kaikki tiedot pysyvät tällä laitteella</p>`;
 }
 
 /* ---------- Diary ---------- */
@@ -988,6 +989,10 @@ function openSettings() {
           <label class="btn ghost">Tuo varmuuskopio<input type="file" accept="application/json,.json" class="vh" data-x="import"></label>
         </div>
       </div>
+      <div class="field"><span>Sovellus</span>
+        <p class="hint">Versio ${APP_VERSION}. Päivitykset tulevat automaattisesti. Jos uusin muutos ei silti näy, paina alla olevaa nappia — tietosi säilyvät.</p>
+        <button type="button" class="btn ghost" data-x="update">Päivitä sovellus</button>
+      </div>
       <div class="field"><span>Vaara-alue</span>
         <button type="button" class="btn danger" data-x="erase">${icon('trash')}Poista kaikki tiedot</button>
       </div>`,
@@ -995,6 +1000,7 @@ function openSettings() {
       form.querySelector('[data-x=export]').onclick = exportData;
       form.querySelector('[data-x=import]').onchange = e => importData(e.target.files[0]);
       form.querySelector('[data-x=erase]').onclick = eraseAll;
+      form.querySelector('[data-x=update]').onclick = forceUpdate;
     },
     onSave(v) { db.settings.name = v.name; db.settings.zones = [v.zone1, v.zone2]; save('settings'); render(); },
   });
@@ -1309,7 +1315,35 @@ document.addEventListener('visibilitychange', () => {
 route();
 checkReminders();
 
+/* ---------- Updates ---------- */
+
+// Check for a new version every time the app is opened or brought back to the screen,
+// and reload once when the new version takes over.
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading || sheet.open) return; // never throw away something being typed
+    reloading = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+    const check = () => reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+    window.addEventListener('focus', check);
+  }).catch(() => {});
+}
+
+// Manual fallback in Settings: drop the offline copy and load everything fresh. Saved data is untouched.
+async function forceUpdate() {
+  toast('Päivitetään…');
+  try {
+    const regs = navigator.serviceWorker ? await navigator.serviceWorker.getRegistrations() : [];
+    await Promise.all(regs.map(r => r.unregister()));
+  } catch (_) { /* ignore */ }
+  try {
+    if (window.caches) await Promise.all((await caches.keys()).map(k => caches.delete(k)));
+  } catch (_) { /* ignore */ }
+  location.replace(`${location.pathname}?fresh=${Date.now()}${location.hash}`);
 }
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});

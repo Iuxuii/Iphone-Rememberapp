@@ -1,10 +1,13 @@
-// Offline support: use the network when available (so updates show up), fall back to the cache.
-const CACHE = 'kaiken-alku-v6';
+// Offline support: always ask the server for the newest files (so updates show up right away),
+// and fall back to the cached copy only when there is no connection.
+// Bump VERSION (here, in app.js and the ?v= in index.html) with every release.
+const VERSION = '7';
+const CACHE = 'kaiken-alku-v' + VERSION;
 const ASSETS = [
   './',
   './index.html',
-  './styles.css',
-  './app.js',
+  './styles.css?v=' + VERSION,
+  './app.js?v=' + VERSION,
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/apple-touch-icon.png',
@@ -14,7 +17,13 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => Promise.all(ASSETS.map(url =>
+        fetch(url, { cache: 'reload' }).then(res => { if (!res.ok) throw new Error(url); return c.put(url, res); })
+      )))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
@@ -29,7 +38,8 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(req)
+    // 'no-cache' makes the phone check with the server instead of trusting its own HTTP cache.
+    fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
       .then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
         return res;
