@@ -1,5 +1,5 @@
-// Offline support: serve the app from cache, refresh the cache in the background.
-const CACHE = 'grove-v1';
+// Offline support: use the network when available (so updates show up), fall back to the cache.
+const CACHE = 'grove-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -27,12 +27,24 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
-  e.respondWith(caches.open(CACHE).then(async cache => {
-    const cached = await cache.match(req, { ignoreSearch: true });
-    const fresh = fetch(req)
-      .then(res => { if (res.ok) cache.put(req, res.clone()); return res; })
-      .catch(() => cached);
-    if (cached) { e.waitUntil(fresh); return cached; }
-    return fresh;
+  e.respondWith(
+    fetch(req)
+      .then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
+        return res;
+      })
+      .catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('./index.html')))
+  );
+});
+
+// Tapping a reminder opens Grove on the to-do list.
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || './#/todo', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) {
+      if ('focus' in c) { if ('navigate' in c) c.navigate(url).catch(() => {}); return c.focus(); }
+    }
+    return self.clients.openWindow(url);
   }));
 });

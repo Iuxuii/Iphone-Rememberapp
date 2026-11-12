@@ -77,6 +77,8 @@ const ICONS = {
   todo: '<rect x="4" y="4" width="16" height="16" rx="4.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/>',
   goals: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8" fill="currentColor"/>',
   dreams: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4 7 7 0 0 0 20 14.5z"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
 };
 function icon(name, cls = '') {
   return `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -152,8 +154,9 @@ const STATS = {
   todo() {
     const open = db.todos.filter(x => !x.done);
     if (!open.length) return db.todos.length ? 'All clear' : 'Nothing yet';
-    const late = open.filter(x => x.due && x.due < today()).length;
-    return `${open.length} open${late ? ` · ${late} overdue` : ''}`;
+    const late = open.filter(isLate).length;
+    const next = open.filter(x => x.urgent && x.time && !isLate(x)).sort((a, b) => taskKey(a).localeCompare(taskKey(b)))[0];
+    return `${open.length} open${late ? ` · ${late} overdue` : ''}${next ? ` · next ${next.due === today() ? '' : relDay(next.due) + ' '}${next.time}` : ''}`;
   },
   goals() {
     if (!db.goals.length) return 'Set your first goal';
@@ -173,7 +176,7 @@ function lobby() {
   const greet = h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
   const name = (db.settings.name || '').trim();
   const evToday = db.events.filter(e => e.date === t).length;
-  const due = db.todos.filter(x => !x.done && x.due && x.due <= t).length;
+  const due = db.todos.filter(x => !x.done && x.due && (x.due <= t || isLate(x))).length;
   const wrote = db.diary.some(e => e.date === t);
 
   return `
@@ -299,7 +302,7 @@ function calendar() {
 
 function agenda(d) {
   const evs = db.events.filter(e => e.date === d).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
-  const tasks = db.todos.filter(x => x.due === d);
+  const tasks = db.todos.filter(x => x.due === d).sort((a, b) => taskKey(a).localeCompare(taskKey(b)));
   const pages = db.diary.filter(e => e.date === d);
   let html = `<h3 class="agenda-h">${longDay(d)}</h3>`;
   if (!evs.length && !tasks.length && !pages.length) {
@@ -315,7 +318,7 @@ function agenda(d) {
   for (const x of tasks) {
     html += `<li class="ag-task${x.done ? ' done' : ''}">
       <button class="check" data-action="toggle-todo" data-id="${x.id}" aria-label="${x.done ? 'Mark not done' : 'Mark done'}">${icon('check')}</button>
-      <button class="ag-main" data-action="edit-todo" data-id="${x.id}"><span class="ag-kicker">Task</span><span class="ag-title">${esc(x.title)}</span></button>
+      <button class="ag-main" data-action="edit-todo" data-id="${x.id}"><span class="ag-kicker">${x.urgent ? 'Time-sensitive' : 'Task'}${x.time ? ' · ' + x.time : ''}</span><span class="ag-title">${esc(x.title)}</span></button>
     </li>`;
   }
   for (const e of pages) {
@@ -363,56 +366,205 @@ function shiftMonth(n) {
 
 /* ---------- To-do ---------- */
 
+const REMINDERS = [['', 'None'], ['0', 'At the time'], ['5', '5 min before'], ['15', '15 min before'], ['60', '1 hour before'], ['1440', '1 day before']];
+const remindLabel = r => (REMINDERS.find(([v]) => v === String(r ?? '')) || REMINDERS[0])[1];
+const taskKey = t => (t.due || '9999-99-99') + 'T' + (t.time || '99:99');
+
+function dueMs(t) {
+  if (!t.due) return null;
+  const d = parseISO(t.due);
+  if (t.time) { const [h, m] = t.time.split(':').map(Number); d.setHours(h, m, 0, 0); }
+  else d.setHours(23, 59, 59, 0);
+  return d.getTime();
+}
+function isLate(t) { const ms = dueMs(t); return !t.done && ms !== null && ms < Date.now(); }
+
 function todo() {
   const total = db.todos.length;
   const done = db.todos.filter(x => x.done).length;
   const f = ui.todoFilter;
-  const open = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.created - b.created;
+  const byDue = (a, b) => taskKey(a).localeCompare(taskKey(b)) || a.created - b.created;
   const closed = (a, b) => (b.doneAt || 0) - (a.doneAt || 0);
-  let list;
-  if (f === 'open') list = db.todos.filter(x => !x.done).sort(open);
-  else if (f === 'done') list = db.todos.filter(x => x.done).sort(closed);
-  else list = [...db.todos.filter(x => !x.done).sort(open), ...db.todos.filter(x => x.done).sort(closed)];
+  const openTasks = db.todos.filter(x => !x.done);
+  const urgent = openTasks.filter(x => x.urgent).sort(byDue);
+  const normal = openTasks.filter(x => !x.urgent).sort(byDue);
+  const finished = db.todos.filter(x => x.done).sort(closed);
 
-  const emptyMsg = !total ? empty('todo', 'Nothing to do yet. Add your first task above.')
+  const group = (title, items) => items.length ? `${title ? `<h3 class="group">${title}</h3>` : ''}<ul class="tasks">${items.map(taskRow).join('')}</ul>` : '';
+  let body = '';
+  if (f !== 'done') {
+    body += urgent.length ? group(`${icon('clock')}Time-sensitive`, urgent) + group(normal.length ? 'Other tasks' : '', normal) : group('', normal);
+  }
+  if (f === 'done') body += group('', finished);
+  if (f === 'all' && finished.length) body += group('Done', finished);
+
+  const emptyMsg = !total ? empty('todo', 'Nothing to do yet. Add a task above — tap the clock for something time-sensitive.')
     : f === 'open' ? `<p class="muted center pad">All clear. Enjoy it.</p>`
     : `<p class="muted center pad">No finished tasks yet.</p>`;
 
   return head('todo') + `
   <form class="quick-add" data-form="add-todo">
     <input class="inp" id="todo-input" name="task" placeholder="Add a task…" autocomplete="off" enterkeyhint="done" aria-label="New task">
+    <button type="button" class="add-btn alt" data-action="new-timed" aria-label="Add a time-sensitive task">${icon('clock')}</button>
     <button class="add-btn" aria-label="Add task">${icon('plus')}</button>
   </form>
   ${total ? `<div class="progress"><div class="progress-txt"><span>${done} of ${total} done</span><span>${Math.round(done / total * 100)}%</span></div>
     <span class="meter"><i style="width:${done / total * 100}%"></i></span></div>
     ${seg('todo-filter', [['open', 'Open'], ['done', 'Done'], ['all', 'All']], f)}` : ''}
-  ${list.length ? `<ul class="tasks">${list.map(taskRow).join('')}</ul>` : emptyMsg}
+  ${body || emptyMsg}
   ${done && f !== 'open' ? '<button class="link block" data-action="clear-done">Clear completed</button>' : ''}`;
 }
 
 function taskRow(x) {
-  const late = !x.done && x.due && x.due < today();
-  return `<li class="task${x.done ? ' done' : ''}">
+  const late = isLate(x);
+  const when = x.due ? `${relDay(x.due)}${x.time ? ' · ' + x.time : ''}` : '';
+  const meta = [
+    when ? `<span class="${late ? 'late' : x.urgent ? 'soon' : ''}">${late ? 'Overdue · ' : ''}${when}</span>` : '',
+    x.urgent && x.remind !== '' && x.remind != null && !x.done ? `<span class="bell" title="${remindLabel(x.remind)}">${icon('bell')}${esc(remindLabel(x.remind))}</span>` : '',
+  ].filter(Boolean).join('');
+  return `<li class="task${x.done ? ' done' : ''}${x.urgent ? ' urgent' : ''}">
     <button class="check" data-action="toggle-todo" data-id="${x.id}" aria-label="${x.done ? 'Mark not done' : 'Mark done'}">${icon('check')}</button>
     <button class="task-main" data-action="edit-todo" data-id="${x.id}">
       <span class="task-title">${esc(x.title)}</span>
-      ${x.due ? `<span class="task-meta${late ? ' late' : ''}">${late ? 'Overdue · ' : ''}${relDay(x.due)}</span>` : ''}
+      ${meta ? `<span class="task-meta">${meta}</span>` : ''}
     </button>
   </li>`;
 }
 
-function todoSheet(x) {
+function nextHour() { const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0); return `${pad(d.getHours())}:00`; }
+
+function notifyHelp() {
+  let msg;
+  if (!notifySupported()) msg = 'To get notifications, open Grove from your Home Screen (iPhone with iOS 16.4 or newer).';
+  else if (Notification.permission === 'denied') msg = 'Notifications are blocked. Turn them on in iPhone Settings → Notifications → Grove.';
+  else if (Notification.permission === 'default') msg = 'Grove will ask to send you notifications when you save.';
+  else msg = 'Notifications are on. iPhone only lets Grove send them while it’s open — for an alert that always arrives, add it to your Calendar too.';
+  return `<div class="field notice" data-when="urgent">
+    <p class="hint">${msg}</p>
+    <button type="button" class="btn ghost" data-x="ics">${icon('calendar')}Add to iPhone Calendar</button>
+  </div>`;
+}
+
+function todoSheet(x, preset) {
+  const isNew = !x;
+  const values = x
+    ? { ...x, urgent: x.urgent ? 'on' : '', remind: x.remind ?? '' }
+    : { due: today(), time: nextHour(), urgent: 'on', remind: '0', ...preset };
   openSheet({
-    title: 'Task',
-    values: x,
+    title: isNew ? 'New task' : 'Task',
+    values,
     fields: [
-      { name: 'title', label: 'Task', required: true },
-      { name: 'due', label: 'Due date', type: 'date' },
+      { name: 'title', label: 'Task', required: true, placeholder: 'What needs doing?' },
+      { name: 'urgent', label: 'Time-sensitive', type: 'switch', hint: 'Set an exact time and get notified' },
+      { name: 'due', label: 'Date', type: 'date' },
+      { name: 'time', label: 'Time', type: 'time', when: 'urgent', required: true },
+      { name: 'remind', label: 'Notify me', type: 'chips', when: 'urgent', options: REMINDERS },
       { name: 'note', label: 'Note', type: 'textarea', rows: 3 },
     ],
-    onSave(v) { Object.assign(x, v); save('todos'); render(); },
-    onDelete() { db.todos = db.todos.filter(t => t !== x); save('todos'); render(); },
+    extra: notifyHelp(),
+    onOpen(form) {
+      form.querySelector('[data-x=ics]').onclick = () => {
+        const el = form.elements;
+        if (!el.title.value.trim()) { toast('Give the task a name first'); return; }
+        if (!el.time.value) { toast('Set a time first'); return; }
+        downloadICS({
+          id: x?.id, title: el.title.value.trim(), note: el.note.value.trim(),
+          due: el.due.value || today(), time: el.time.value, remind: el.remind.value,
+        });
+      };
+    },
+    onSave(v) {
+      const urgent = v.urgent === 'on';
+      const t = { ...v, urgent };
+      if (urgent && !t.due) t.due = today();
+      if (!urgent) { t.time = ''; t.remind = ''; }
+      if (!x || x.due !== t.due || x.time !== t.time || String(x.remind ?? '') !== t.remind) t.notified = '';
+      if (isNew) db.todos.push({ id: uid(), created: Date.now(), done: false, ...t });
+      else Object.assign(x, t);
+      save('todos');
+      if (urgent && t.remind !== '') ensurePermission();
+      render();
+      setTimeout(checkReminders, 300); // after the sheet has closed, so an in-app alert stays visible
+    },
+    onDelete: isNew ? null : () => { db.todos = db.todos.filter(t => t !== x); save('todos'); render(); },
   });
+}
+
+/* ---------- Reminders & notifications ---------- */
+
+function notifySupported() { return 'Notification' in window && 'serviceWorker' in navigator; }
+
+function ensurePermission() {
+  if (!notifySupported()) { toast('Open Grove from your Home Screen to get notifications', 4000); return; }
+  if (Notification.permission === 'denied') { toast('Notifications are blocked in iPhone Settings', 4000); return; }
+  if (Notification.permission === 'default') {
+    try {
+      Promise.resolve(Notification.requestPermission()).then(p => {
+        if (p === 'granted') toast('Notifications on');
+        else toast('Notifications stay off — reminders show inside Grove', 4000);
+      }).catch(() => {});
+    } catch (_) { /* ignore */ }
+  }
+}
+
+function fireAt(t) {
+  if (t.done || !t.urgent || !t.due || !t.time || t.remind === '' || t.remind == null) return null;
+  return dueMs(t) - Number(t.remind) * 60000;
+}
+
+function checkReminders() {
+  const nowMs = Date.now();
+  let changed = false;
+  for (const t of db.todos) {
+    const at = fireAt(t);
+    if (at === null || nowMs < at || t.notified === String(at)) continue;
+    t.notified = String(at);
+    changed = true;
+    if (nowMs - at < 6 * 3600e3) notify(t); // don't spam about reminders that are long past
+  }
+  if (changed) { save('todos'); if (ui.view === 'todo' && !sheet.open) render(); }
+}
+
+function notify(t) {
+  const when = `${relDay(t.due)} at ${t.time}`;
+  const body = Number(t.remind) ? `${remindLabel(t.remind).replace(' before', '')} to go · ${when}` : `Now · ${when}`;
+  if (!document.hidden) toast(`⏰ ${t.title} · ${t.time}`, 6000);
+  if (notifySupported() && Notification.permission === 'granted') {
+    navigator.serviceWorker.getRegistration().then(reg => {
+      const opts = { body, tag: t.id, icon: 'icons/icon-192.png', data: { url: './#/todo' } };
+      if (reg) return reg.showNotification(t.title, opts);
+      new Notification(t.title, opts);
+    }).catch(() => {});
+  }
+}
+
+setInterval(checkReminders, 15000);
+
+function downloadICS(t) {
+  const [y, mo, d] = t.due.split('-');
+  const [h, mi] = t.time.split(':');
+  const e = s => String(s).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const mins = t.remind === '' || t.remind == null ? 0 : Number(t.remind);
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Grove//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:${t.id || uid()}@grove`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART:${y}${mo}${d}T${h}${mi}00`,
+    'DURATION:PT15M',
+    `SUMMARY:${e(t.title)}`,
+    ...(t.note ? [`DESCRIPTION:${e(t.note)}`] : []),
+    'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${e(t.title)}`, `TRIGGER:-PT${mins}M`, 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR',
+  ];
+  const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${t.title.replace(/[^\w\- ]+/g, '').trim().slice(0, 40) || 'task'}.ics`;
+  document.body.append(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
 }
 
 /* ---------- Goals ---------- */
@@ -631,9 +783,14 @@ function field(f, values) {
     return `<label class="field"><span>${f.label}</span><textarea class="inp" name="${f.name}" rows="${f.rows || 5}"${ph}>${esc(val)}</textarea></label>`;
   }
   if (f.type === 'chips') {
-    return `<fieldset class="field"><legend>${f.label}</legend><div class="chips">${f.options.map(o =>
-      `<label class="chip-opt"><input type="radio" name="${f.name}" value="${esc(o)}"${o === val ? ' checked data-was="1"' : ''}><span>${esc(o)}</span></label>`
+    const opts = f.options.map(o => (Array.isArray(o) ? o : [o, o]));
+    return `<fieldset class="field"><legend>${f.label}</legend><div class="chips">${opts.map(([v, l]) =>
+      `<label class="chip-opt"><input type="radio" name="${f.name}" value="${esc(v)}"${String(v) === String(val) ? ' checked data-was="1"' : ''}><span>${esc(l)}</span></label>`
     ).join('')}</div></fieldset>`;
+  }
+  if (f.type === 'switch') {
+    return `<label class="switch-row"><span class="sw-txt"><b>${f.label}</b>${f.hint ? `<small>${esc(f.hint)}</small>` : ''}</span>
+      <span class="switch"><input type="checkbox" name="${f.name}"${val === 'on' || val === true ? ' checked' : ''}><i></i></span></label>`;
   }
   return `<label class="field"><span>${f.label}</span><input class="inp" type="${f.type || 'text'}" name="${f.name}" value="${esc(val)}"${ph}${f.type ? '' : ' autocomplete="off"'}></label>`;
 }
@@ -647,7 +804,7 @@ function openSheet(o) {
       <button type="submit" class="link strong">${o.saveLabel || 'Save'}</button>
     </div>
     <div class="sheet-body">
-      ${o.fields.map(f => field(f, values)).join('')}
+      ${o.fields.map(f => (f.when ? `<div class="when" data-when="${f.when}">${field(f, values)}</div>` : field(f, values))).join('')}
       ${o.extra || ''}
       ${o.onDelete ? `<button type="button" class="btn danger" data-delete>${icon('trash')}Delete</button>` : ''}
     </div>
@@ -664,11 +821,18 @@ function openSheet(o) {
   });
   form.addEventListener('input', e => e.target.classList.remove('invalid'));
 
+  // Fields marked `when: '<switch name>'` only show while that switch is on.
+  const shown = name => { const c = form.elements[name]; return !!(c && c.checked); };
+  const syncWhen = () => form.querySelectorAll('[data-when]').forEach(el => { el.hidden = !shown(el.dataset.when); });
+  form.addEventListener('change', syncWhen);
+  syncWhen();
+
   form.onsubmit = e => {
     e.preventDefault();
     const fd = new FormData(form);
     const out = {};
     for (const f of o.fields) {
+      if (f.when && !shown(f.when)) { out[f.name] = ''; continue; }
       out[f.name] = String(fd.get(f.name) ?? '').trim();
       if (f.required && !out[f.name]) {
         const el = form.elements[f.name];
@@ -698,7 +862,7 @@ sheet.addEventListener('cancel', e => { e.preventDefault(); closeSheet(); });
 
 /* ---------- Toast ---------- */
 
-function toast(msg) {
+function toast(msg, ms = 2200) {
   const host = sheet.open ? sheet : document.body;
   let t = document.querySelector('.toast');
   if (!t) { t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); }
@@ -706,7 +870,7 @@ function toast(msg) {
   t.textContent = msg;
   requestAnimationFrame(() => t.classList.add('show'));
   clearTimeout(t._h);
-  t._h = setTimeout(() => t.classList.remove('show'), 2200);
+  t._h = setTimeout(() => t.classList.remove('show'), ms);
 }
 
 /* ---------- Actions ---------- */
@@ -736,6 +900,12 @@ const ACTIONS = {
     ui._t = setTimeout(render, 380); // let the tick animate before the list re-sorts
   },
   'edit-todo': d => todoSheet(find('todos', d.id)),
+  'new-timed'() {
+    const input = document.getElementById('todo-input');
+    const title = input ? input.value.trim() : '';
+    if (input) input.value = '';
+    todoSheet(null, { title });
+  },
   'todo-filter'(d) { ui.todoFilter = d.f; render(); },
   'clear-done'() {
     if (!confirm('Remove all completed tasks?')) return;
@@ -835,9 +1005,14 @@ app.addEventListener('touchend', e => {
 }, { passive: true });
 
 window.addEventListener('hashchange', route);
-document.addEventListener('visibilitychange', () => { if (!document.hidden && !sheet.open) render(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  checkReminders();
+  if (!sheet.open) render();
+});
 
 route();
+checkReminders();
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
