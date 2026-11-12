@@ -1089,6 +1089,7 @@ function route() {
   const id = location.hash.replace(/^#\/?/, '');
   ui.view = VIEWS[id] ? id : 'lobby';
   if (sheet.open) closeSheet();
+  document.body.classList.toggle('lobby', ui.view === 'lobby');
   render();
   app.classList.remove('enter'); void app.offsetWidth; app.classList.add('enter');
   window.scrollTo(0, 0);

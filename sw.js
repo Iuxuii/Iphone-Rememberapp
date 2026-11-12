@@ -1,5 +1,5 @@
 // Offline support: use the network when available (so updates show up), fall back to the cache.
-const CACHE = 'kaiken-alku-v4';
+const CACHE = 'kaiken-alku-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
   './icons/apple-touch-icon.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './images/lobby-bg.jpg',
 ];
 
 self.addEventListener('install', e => {
