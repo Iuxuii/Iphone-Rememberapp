@@ -6,7 +6,7 @@
 /* ---------- Storage ---------- */
 
 const PREFIX = 'grove.'; // storage key from the app's first name — kept so saved data isn't lost
-const DEFAULTS = { diary: [], events: [], todos: [], goals: [], dreams: [], settings: { name: '' } };
+const DEFAULTS = { diary: [], events: [], todos: [], goals: [], dreams: [], topics: [], notes: [], settings: { name: '' } };
 const KEYS = Object.keys(DEFAULTS);
 const clone = v => JSON.parse(JSON.stringify(v));
 
@@ -80,6 +80,25 @@ const ICONS = {
   dreams: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4 7 7 0 0 0 20 14.5z"/>',
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+  pin: '<path d="M9 4h6l-1 5.5 3 2.5v2H7v-2l3-2.5z"/><path d="M12 14v6"/>',
+  note: '<path d="M7 3.5h7.5L19 8v12.5H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z"/><path d="M14 3.5V8h5M9 12.5h6M9 16h4"/>',
+  // topic icons
+  idea: '<path d="M9.5 17.5h5M10.5 20.5h3"/><path d="M12 3.5a5.8 5.8 0 0 0-3.4 10.5c.6.5.9 1.1.9 1.9v1.6h5v-1.6c0-.8.3-1.4.9-1.9A5.8 5.8 0 0 0 12 3.5z"/>',
+  school: '<path d="M2.5 9.5L12 5l9.5 4.5L12 14z"/><path d="M6.5 11.6V16c0 1.4 2.5 3 5.5 3s5.5-1.6 5.5-3v-4.4M21.5 9.5v5"/>',
+  work: '<rect x="3.5" y="7.5" width="17" height="12" rx="2.5"/><path d="M9 7.5v-2A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5v2M3.5 12.5h17"/>',
+  music: '<path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  heart: '<path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.3a4.3 4.3 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/>',
+  star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
+  home: '<path d="M4 11l8-6.5 8 6.5V20H4z"/><path d="M10 20v-5h4v5"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.6 3.5 5.4 3.5 8.5s-1.1 5.9-3.5 8.5c-2.4-2.6-3.5-5.4-3.5-8.5s1.1-5.9 3.5-8.5z"/>',
+  sport: '<path d="M6.5 7.5v9M17.5 7.5v9M3.5 10v4M20.5 10v4M6.5 12h11"/>',
+  film: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M7.5 5v14M16.5 5v14M3.5 9.5h4M3.5 14.5h4M16.5 9.5h4M16.5 14.5h4"/>',
+  food: '<path d="M7 3.5v6a2 2 0 0 0 2 2v9M11 3.5v6a2 2 0 0 1-2 2M9 3.5v5M17 20.5v-17c-2 1-3.5 3.5-3.5 7 0 1.6.8 2.5 3.5 2.5"/>',
+  money: '<path d="M4 7.5h14.5A1.5 1.5 0 0 1 20 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5z"/><path d="M4 7.5V6a1.5 1.5 0 0 1 1.5-1.5H16v3M15.5 13.5H17"/>',
+  code: '<path d="M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5M13.5 5l-3 14"/>',
+  leaf: '<path d="M5 19C5 10 10 5 19.5 4.5 19 14 14 19 5 19z"/><path d="M5 19l8-8"/>',
+  camera: '<path d="M4 8h3.5L9 5.5h6L16.5 8H20v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  chat: '<path d="M4.5 5.5h15v10h-8L7 19v-3.5H4.5z"/>',
 };
 function icon(name, cls = '') {
   return `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -88,11 +107,12 @@ function icon(name, cls = '') {
 /* ---------- Sections ---------- */
 
 const SECTIONS = [
-  { id: 'diary', title: 'Päiväkirja', icon: 'diary', accent: 'tan' },
+  { id: 'diary', title: 'Päiväkirja', icon: 'diary', accent: 'tan', wide: true },
   { id: 'calendar', title: 'Kalenteri', icon: 'calendar', accent: 'forest' },
   { id: 'todo', title: 'Tehtävät', icon: 'todo', accent: 'moss' },
   { id: 'goals', title: 'Tavoitteet', icon: 'goals', accent: 'bark' },
   { id: 'dreams', title: 'Haaveet', icon: 'dreams', accent: 'sage' },
+  { id: 'notes', title: 'Muistiinpanot', icon: 'note', accent: 'rust', wide: true },
 ];
 const sec = id => SECTIONS.find(s => s.id === id);
 
@@ -125,6 +145,8 @@ const ui = {
   todoFilter: 'open',
   goalOpen: null,
   dreamFilter: 'Dreaming',
+  topic: null,
+  notesQuery: '',
 };
 
 /* ---------- Shared pieces ---------- */
@@ -183,6 +205,10 @@ const STATS = {
     if (!db.dreams.length) return 'Mistä haaveilet?';
     const lived = db.dreams.filter(d => d.status === 'Lived').length;
     return `${plural(db.dreams.length, 'haave', 'haavetta')} · ${lived} toteutunut`;
+  },
+  notes() {
+    if (!db.topics.length) return 'Luo ensimmäinen aihe';
+    return `${plural(db.notes.length, 'muistiinpano', 'muistiinpanoa')} · ${plural(db.topics.length, 'aihe', 'aihetta')}`;
   },
 };
 
@@ -306,7 +332,7 @@ function lobby() {
   </header>
   <nav class="tiles" aria-label="Osiot">
     ${SECTIONS.map((s, i) => `
-    <a class="tile acc-${s.accent}${i === 0 ? ' wide' : ''}" href="#/${s.id}">
+    <a class="tile acc-${s.accent}${s.wide ? ' wide' : ''}" href="#/${s.id}">
       <span class="t-ic">${icon(s.icon)}</span>
       <span class="go">${icon('arrow')}</span>
       <span class="t-txt"><h2>${s.title}</h2><p>${esc(STATS[s.id]())}</p></span>
@@ -811,6 +837,137 @@ function dreamSheet(d) {
   });
 }
 
+/* ---------- Notes ---------- */
+
+const TOPIC_ICONS = ['idea', 'school', 'work', 'music', 'heart', 'star', 'home', 'globe', 'sport', 'film', 'food', 'money', 'code', 'leaf', 'camera', 'chat', 'diary', 'note'];
+const TOPIC_COLORS = ['forest', 'moss', 'sage', 'tan', 'bark', 'rust'];
+const byUpdated = (a, b) => (b.updated || b.created || 0) - (a.updated || a.created || 0);
+const notesIn = id => db.notes.filter(n => n.topicId === id);
+
+function notes() {
+  if (ui.topic) {
+    const t = find('topics', ui.topic);
+    if (t) return topicView(t);
+  }
+  const top = head('notes', addBtn('new-topic', 'Uusi aihe'));
+  if (!db.topics.length) {
+    return top + empty('notes', 'Luo aiheita muistiinpanoillesi — esimerkiksi Koulu, Ideat tai Musiikki.', 'Uusi aihe', 'new-topic');
+  }
+  return top +
+    (db.notes.length ? `<label class="search">${icon('search')}<input id="notes-q" type="search" placeholder="Hae kaikista muistiinpanoista" value="${esc(ui.notesQuery)}" autocomplete="off" aria-label="Hae muistiinpanoista"></label>` : '') +
+    `<div id="notes-results">${notesHome()}</div>`;
+}
+
+function notesHome() {
+  const q = ui.notesQuery.trim().toLowerCase();
+  if (q) {
+    const list = db.notes.filter(n => `${n.title} ${n.text}`.toLowerCase().includes(q)).sort(byUpdated);
+    return list.length ? `<div class="notes-list">${list.map(n => noteCard(n, true)).join('')}</div>`
+      : `<p class="muted center pad">Haulla “${esc(q)}” ei löytynyt muistiinpanoja.</p>`;
+  }
+  return `<div class="topics">${db.topics.map(t => {
+    const n = notesIn(t.id).length;
+    return `<a class="topic acc-${t.color || 'forest'}" href="#/notes/${t.id}">
+      <span class="t-ic">${icon(t.icon || 'note')}</span>
+      ${n ? `<span class="topic-count">${n}</span>` : ''}
+      <span class="topic-name">${esc(t.name)}</span>
+    </a>`;
+  }).join('')}
+    <button class="topic add" data-action="new-topic"><span class="t-ic">${icon('plus')}</span><span class="topic-name">Uusi aihe</span></button>
+  </div>`;
+}
+
+function topicView(t) {
+  const list = notesIn(t.id).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || byUpdated(a, b));
+  return `<header class="topbar">
+      <a href="#/notes" class="back">${icon('back')}<span>Muistiinpanot</span></a>
+      <span class="bar-actions">
+        <button class="icon-btn" data-action="edit-topic" data-id="${t.id}" aria-label="Muokkaa aihetta">${icon('sliders')}</button>
+        ${addBtn('new-note', 'Uusi muistiinpano')}
+      </span>
+    </header>
+    <div class="title-row acc-${t.color || 'forest'}"><span class="t-ic">${icon(t.icon || 'note')}</span><h1 class="wrap">${esc(t.name)}</h1></div>
+    ${list.length ? `<div class="notes-list">${list.map(n => noteCard(n, false)).join('')}</div>`
+      : `<div class="empty acc-${t.color || 'forest'}"><span class="t-ic big">${icon(t.icon || 'note')}</span><p>Ei vielä muistiinpanoja tässä aiheessa.</p>
+          <button class="btn solid" data-action="new-note">${icon('plus')}Uusi muistiinpano</button></div>`}`;
+}
+
+function noteCard(n, showTopic) {
+  let title = n.title, body = n.text || '';
+  if (!title) { const lines = body.split('\n'); title = lines.shift(); body = lines.join('\n').trim(); }
+  const t = showTopic ? find('topics', n.topicId) : null;
+  const when = relDay(isoDate(new Date(n.updated || n.created)));
+  return `<button class="note" data-action="edit-note" data-id="${n.id}">
+    <span class="note-top"><span class="note-title">${esc(title || 'Nimetön')}</span>${n.pinned ? `<span class="pin" aria-label="Kiinnitetty">${icon('pin')}</span>` : ''}</span>
+    ${body ? `<span class="note-text">${esc(body)}</span>` : ''}
+    <span class="note-foot">${t ? `<span class="tag acc-${t.color || 'forest'}">${icon(t.icon || 'note')}${esc(t.name)}</span>` : ''}<span>${when}</span></span>
+  </button>`;
+}
+
+function topicSheet(t) {
+  const isNew = !t;
+  openSheet({
+    title: isNew ? 'Uusi aihe' : 'Aihe',
+    values: t || { icon: 'idea', color: 'forest' },
+    fields: [
+      { name: 'name', label: 'Nimi', required: true, placeholder: 'Esim. Koulu, Ideat, Musiikki' },
+      { name: 'icon', label: 'Kuvake', type: 'icons', options: TOPIC_ICONS },
+      { name: 'color', label: 'Väri', type: 'swatches', options: TOPIC_COLORS },
+    ],
+    onOpen(form) {
+      const pick = form.querySelector('.icon-pick');
+      const sync = () => { pick.className = `icon-pick acc-${form.elements.color.value || 'forest'}`; };
+      form.addEventListener('change', sync);
+      sync();
+    },
+    onSave(v) {
+      const rec = { name: v.name, icon: v.icon || 'note', color: v.color || 'forest' };
+      if (isNew) {
+        const id = uid();
+        db.topics.push({ id, created: Date.now(), ...rec });
+        save('topics');
+        location.hash = `#/notes/${id}`;
+      } else {
+        Object.assign(t, rec); save('topics'); render();
+      }
+    },
+    onDelete: isNew ? null : () => {
+      const n = notesIn(t.id).length;
+      if (!confirm(n ? `Poistetaanko aihe “${t.name}” ja sen ${plural(n, 'muistiinpano', 'muistiinpanoa')}?` : `Poistetaanko aihe “${t.name}”?`)) return false;
+      db.topics = db.topics.filter(x => x !== t);
+      db.notes = db.notes.filter(x => x.topicId !== t.id);
+      save('topics'); save('notes');
+      location.hash = '#/notes';
+    },
+  });
+}
+
+function noteSheet(n) {
+  const isNew = !n;
+  openSheet({
+    title: isNew ? 'Uusi muistiinpano' : 'Muistiinpano',
+    values: n ? { ...n, pinned: n.pinned ? 'on' : '' } : { topicId: ui.topic || db.topics[0]?.id },
+    fields: [
+      { name: 'title', label: 'Otsikko', placeholder: 'Otsikko' },
+      { name: 'text', label: 'Muistiinpano', type: 'textarea', rows: 12, placeholder: 'Kirjoita…' },
+      { name: 'topicId', label: 'Aihe', type: 'select', options: db.topics.map(t => [t.id, t.name]) },
+      { name: 'pinned', label: 'Kiinnitä ylös', type: 'switch', hint: 'Näkyy aiheen ensimmäisenä' },
+    ],
+    onSave(v) {
+      if (!v.title && !v.text) { toast('Kirjoita ensin jotain'); return false; }
+      const rec = { title: v.title, text: v.text, topicId: v.topicId, pinned: v.pinned === 'on', updated: Date.now() };
+      if (isNew) db.notes.push({ id: uid(), created: Date.now(), ...rec });
+      else Object.assign(n, rec);
+      save('notes'); render();
+      if (ui.topic && rec.topicId !== ui.topic) toast(`Siirretty aiheeseen ${find('topics', rec.topicId)?.name || ''}`);
+    },
+    onDelete: isNew ? null : () => {
+      if (!confirm('Poistetaanko tämä muistiinpano?')) return false;
+      db.notes = db.notes.filter(x => x !== n); save('notes'); render();
+    },
+  });
+}
+
 /* ---------- Settings & backup ---------- */
 
 function openSettings() {
@@ -883,7 +1040,7 @@ function importData(file) {
 }
 
 function eraseAll() {
-  if (!confirm('Poistetaanko kaikki merkinnät, tapahtumat, tehtävät, tavoitteet ja haaveet tältä laitteelta? Tätä ei voi perua.')) return;
+  if (!confirm('Poistetaanko kaikki merkinnät, tapahtumat, tehtävät, tavoitteet, haaveet ja muistiinpanot tältä laitteelta? Tätä ei voi perua.')) return;
   KEYS.forEach(k => { db[k] = clone(DEFAULTS[k]); try { localStorage.removeItem(PREFIX + k); } catch (_) {} });
   closeSheet(); render(); toast('Kaikki tiedot poistettu');
 }
@@ -902,6 +1059,12 @@ function field(f, values) {
     const opts = f.options.map(o => (Array.isArray(o) ? o : [o, o]));
     return `<fieldset class="field"><legend>${f.label}</legend><div class="chips">${opts.map(([v, l]) =>
       `<label class="chip-opt"><input type="radio" name="${f.name}" value="${esc(v)}"${String(v) === String(val) ? ' checked data-was="1"' : ''}><span>${esc(l)}</span></label>`
+    ).join('')}</div></fieldset>`;
+  }
+  if (f.type === 'icons' || f.type === 'swatches') {
+    const icons = f.type === 'icons';
+    return `<fieldset class="field"><legend>${f.label}</legend><div class="${icons ? 'icon-pick' : 'swatches'}">${f.options.map(v =>
+      `<label class="pick${icons ? '' : ` sw acc-${v}`}"><input type="radio" name="${f.name}" value="${v}"${v === val ? ' checked' : ''} aria-label="${v}"><span>${icons ? icon(v) : ''}</span></label>`
     ).join('')}</div></fieldset>`;
   }
   if (f.type === 'select') {
@@ -936,7 +1099,7 @@ function openSheet(o) {
   form.addEventListener('click', e => {
     const r = e.target.closest('input[type=radio]');
     if (!r) return;
-    if (r.dataset.was === '1') r.checked = false;
+    if (r.dataset.was === '1' && !r.closest('.pick')) r.checked = false; // icon/colour pickers always keep a choice
     form.querySelectorAll(`input[name="${r.name}"]`).forEach(x => { x.dataset.was = x.checked ? '1' : ''; });
   });
   form.addEventListener('input', e => e.target.classList.remove('invalid'));
@@ -1056,6 +1219,11 @@ const ACTIONS = {
   'new-dream': () => dreamSheet(),
   'edit-dream': d => dreamSheet(find('dreams', d.id)),
   'dream-filter'(d) { ui.dreamFilter = d.f; render(); },
+
+  'new-topic': () => topicSheet(),
+  'edit-topic': d => topicSheet(find('topics', d.id)),
+  'new-note': () => noteSheet(),
+  'edit-note': d => noteSheet(find('notes', d.id)),
 };
 
 const FORMS = {
@@ -1080,20 +1248,22 @@ const FORMS = {
 
 /* ---------- Router ---------- */
 
-const VIEWS = { lobby, diary, calendar, todo, goals, dreams };
+const VIEWS = { lobby, diary, calendar, todo, goals, dreams, notes };
 const app = document.getElementById('app');
 
 function render() { app.innerHTML = VIEWS[ui.view](); }
 
 function route() {
-  const id = location.hash.replace(/^#\/?/, '');
+  const [id, sub] = location.hash.replace(/^#\/?/, '').split('/');
   ui.view = VIEWS[id] ? id : 'lobby';
+  ui.topic = ui.view === 'notes' && sub ? decodeURIComponent(sub) : null;
   if (sheet.open) closeSheet();
   document.body.classList.toggle('lobby', ui.view === 'lobby');
   render();
   app.classList.remove('enter'); void app.offsetWidth; app.classList.add('enter');
   window.scrollTo(0, 0);
-  document.title = ui.view === 'lobby' ? 'Kaiken Alku' : `${sec(ui.view).title} · Kaiken Alku`;
+  const topic = ui.topic && find('topics', ui.topic);
+  document.title = ui.view === 'lobby' ? 'Kaiken Alku' : `${topic ? topic.name : sec(ui.view).title} · Kaiken Alku`;
 }
 
 app.addEventListener('click', e => {
@@ -1112,6 +1282,10 @@ app.addEventListener('input', e => {
   if (e.target.id === 'diary-q') {
     ui.diaryQuery = e.target.value;
     document.getElementById('diary-list').innerHTML = diaryList();
+  }
+  if (e.target.id === 'notes-q') {
+    ui.notesQuery = e.target.value;
+    document.getElementById('notes-results').innerHTML = notesHome();
   }
 });
 

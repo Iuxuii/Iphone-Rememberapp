@@ -1,5 +1,5 @@
 // Offline support: use the network when available (so updates show up), fall back to the cache.
-const CACHE = 'kaiken-alku-v5';
+const CACHE = 'kaiken-alku-v6';
 const ASSETS = [
   './',
   './index.html',
