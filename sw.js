@@ -1,7 +1,7 @@
 // Offline support: always ask the server for the newest files (so updates show up right away),
 // and fall back to the cached copy only when there is no connection.
 // Bump VERSION (here, in app.js and the ?v= in index.html) with every release.
-const VERSION = '7';
+const VERSION = '8';
 const CACHE = 'kaiken-alku-v' + VERSION;
 const ASSETS = [
   './',
@@ -13,7 +13,6 @@ const ASSETS = [
   './icons/apple-touch-icon.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './images/lobby-bg.jpg',
 ];
 
 self.addEventListener('install', e => {

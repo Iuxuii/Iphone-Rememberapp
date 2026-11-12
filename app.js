@@ -5,7 +5,7 @@
 
 /* ---------- Storage ---------- */
 
-const APP_VERSION = '7'; // keep in step with sw.js and index.html
+const APP_VERSION = '8'; // keep in step with sw.js and index.html
 const PREFIX = 'grove.'; // storage key from the app's first name — kept so saved data isn't lost
 const DEFAULTS = { diary: [], events: [], todos: [], goals: [], dreams: [], topics: [], notes: [], settings: { name: '' } };
 const KEYS = Object.keys(DEFAULTS);
@@ -1264,7 +1264,6 @@ function route() {
   ui.view = VIEWS[id] ? id : 'lobby';
   ui.topic = ui.view === 'notes' && sub ? decodeURIComponent(sub) : null;
   if (sheet.open) closeSheet();
-  document.body.classList.toggle('lobby', ui.view === 'lobby');
   render();
   app.classList.remove('enter'); void app.offsetWidth; app.classList.add('enter');
   window.scrollTo(0, 0);
